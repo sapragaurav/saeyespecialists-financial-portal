@@ -3,40 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Financial Portal</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <title>SA Eye Specialists Portal</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        .container { max-width: 800px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-        .upload-section { background: #f9f9f9; padding: 20px; border: 2px dashed #ccc; text-align: center; }
-        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; padding-top: 50px; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h2 { color: #333; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        .hidden { display: none; }
+        #statusMsg { color: red; font-size: 14px; text-align: center; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Clinic Financial Portal</h2>
-    <div id="auth-section">
-        <p>Welcome. Please sign in to continue.</p>
+<div class="card">
+    <div id="loginSection">
+        <h2>Clinic Login</h2>
+        <input type="email" id="email" placeholder="Email Address">
+        <input type="password" id="password" placeholder="Password">
+        <button class="btn" onclick="login()">Sign In</button>
+        <p id="statusMsg"></p>
+    </div>
+
+    <div id="portalSection" class="hidden">
+        <h2 id="welcomeMsg">Welcome</h2>
+        <div id="adminControls" class="hidden">
+            <p style="color: green; font-weight: bold;">Account Type: Super Admin</p>
+            <button class="btn" style="background: #28a745;">Go to Upload Tool</button>
         </div>
-
-    <hr>
-
-    <div class="upload-section">
-        <h3>Upload Daily Report</h3>
-        <input type="file" id="excelUpload" accept=".xlsx, .xls">
-        <p>Note: Only daily reports (where start and end dates match) are accepted.</p>
+        <div id="doctorControls" class="hidden">
+            <p style="color: blue; font-weight: bold;">Account Type: Doctor</p>
+            <button class="btn">View My Financials</button>
+        </div>
+        <br>
+        <button onclick="logout()" style="background:none; border:none; color:grey; cursor:pointer;">Sign Out</button>
     </div>
 </div>
 
-<script type="module">
-    // PASTE YOUR FIREBASE CONFIG HERE
+<script>
+    // 1. Paste your Firebase Config here
     // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+    import { initializeApp } from "firebase/app";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
+    // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAsCKNyHipM5kUKKqJ_klJ1J1l20E4iQ-k",
   authDomain: "saeyespecialists-portal.firebaseapp.com",
@@ -46,10 +60,42 @@ const firebaseConfig = {
   appId: "1:584706843504:web:9b7e3e5307f162de55e5b5"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-    // We will initialize Firebase and our Date Logic here in the next step
+    // Login Function
+    function login() {
+        const email = document.getElementById('email').value;
+        const pass = document.getElementById('password').value;
+        auth.signInWithEmailAndPassword(email, pass)
+            .catch(error => { document.getElementById('statusMsg').innerText = error.message; });
+    }
+
+    // Logout Function
+    function logout() { auth.signOut(); location.reload(); }
+
+    // Logic to check "Who" is logged in
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('portalSection').classList.remove('hidden');
+            
+            // Check if user is Admin or Doctor in Database
+            db.collection("users").doc(user.uid).get().then(doc => {
+                if (doc.exists) {
+                    const userData = doc.data();
+                    document.getElementById('welcomeMsg').innerText = "Hello, " + userData.name;
+                    if (userData.role === 'admin') {
+                        document.getElementById('adminControls').classList.remove('hidden');
+                    } else {
+                        document.getElementById('doctorControls').classList.remove('hidden');
+                    }
+                }
+            });
+        }
+    });
 </script>
 
 </body>
