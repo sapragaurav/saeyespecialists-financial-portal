@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SA Eye Specialists Financial Portal</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .container { max-width: 800px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+        .upload-section { background: #f9f9f9; padding: 20px; border: 2px dashed #ccc; text-align: center; }
+        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Clinic Financial Portal</h2>
+    <div id="auth-section">
+        <p>Welcome. Please sign in to continue.</p>
+        </div>
+
+    <hr>
+
+    <div class="upload-section">
+        <h3>Upload Daily Report</h3>
+        <input type="file" id="excelUpload" accept=".xlsx, .xls">
+        <p>Note: Only daily reports (where start and end dates match) are accepted.</p>
+    </div>
+</div>
+
+<script type="module">
+    // PASTE YOUR FIREBASE CONFIG HERE
+    // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAsCKNyHipM5kUKKqJ_klJ1J1l20E4iQ-k",
+  authDomain: "saeyespecialists-portal.firebaseapp.com",
+  projectId: "saeyespecialists-portal",
+  storageBucket: "saeyespecialists-portal.firebasestorage.app",
+  messagingSenderId: "584706843504",
+  appId: "1:584706843504:web:9b7e3e5307f162de55e5b5"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+    // We will initialize Firebase and our Date Logic here in the next step
+</script>
+
+</body>
+</html>
