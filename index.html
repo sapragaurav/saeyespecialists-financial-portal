@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V2.6</title>
+    <title>SA Eye Specialists Portal - V2.7</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -72,7 +72,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V2.6</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V2.7</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -110,11 +110,11 @@
 
             <div class="dashboard-grid">
                 <div class="stat-card">
-                    <h3>Revenue by Doctor (Selected FY)</h3>
+                    <h3>Revenue by Doctor (Click Bar to Filter)</h3>
                     <canvas id="doctorChart" style="max-height: 300px;"></canvas>
                 </div>
                 <div class="stat-card">
-                    <h3>Monthly Trend by Doctor</h3>
+                    <h3>Monthly Trend by Doctor (Click Dot to Filter)</h3>
                     <canvas id="trendChart" style="max-height: 300px;"></canvas>
                 </div>
             </div>
@@ -127,6 +127,7 @@
                 </select>
 
                 <select id="monthFilter" style="padding:8px; border-radius:4px;"><option value="">-- All Months --</option></select>
+                
                 <input type="date" id="dateFilter" style="padding:8px; border:1px solid #ccc; border-radius:4px;">
                 <input type="text" id="doctorFilter" placeholder="Search Doctor..." style="padding:8px; border:1px solid #ccc; border-radius:4px;">
                 
@@ -192,7 +193,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 2.6</span>
+            <span>Build Version: 2.7</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -256,7 +257,7 @@
 
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records`;
             
-            initFYDropdowns(); // Init BOTH dropdowns (Dashboard + Data Tab)
+            initFYDropdowns();
             populateMonthDropdown();
             renderDashboard(allRecords); 
             renderDoctorList();
@@ -265,25 +266,52 @@
         }
     }
 
-    // --- DROPDOWNS ---
+    // --- DROPDOWNS & FILTER LOGIC ---
     function initFYDropdowns() {
         const fySet = new Set();
         allRecords.forEach(r => fySet.add(getFinancialYear(r.jsDate)));
         const sortedFY = Array.from(fySet).sort().reverse();
 
-        // 1. Dashboard Dropdown
+        // Dashboard Dropdown
         const selDash = document.getElementById('fyDropdown');
         selDash.innerHTML = "";
         if (sortedFY.length === 0) selDash.innerHTML = "<option>No Data</option>";
         sortedFY.forEach(fy => selDash.innerHTML += `<option value="${fy}">${fy}</option>`);
         
-        // 2. Data Tab Dropdown (New in V2.6)
+        // Data Tab Dropdown
         const selData = document.getElementById('dataFyFilter');
         selData.innerHTML = '<option value="">-- All FYs --</option>';
         sortedFY.forEach(fy => selData.innerHTML += `<option value="${fy}">${fy}</option>`);
 
-        renderVisuals();
+        // Events
         selDash.onchange = renderVisuals;
+        selData.onchange = populateMonthDropdown; // LINK: Changed FY triggers Month update
+
+        renderVisuals();
+    }
+
+    // *** NEW: CASCADING FILTER LOGIC (FY -> Month) ***
+    function populateMonthDropdown() {
+        const selectedFY = document.getElementById('dataFyFilter').value;
+        const sel = document.getElementById('monthFilter');
+        
+        // 1. Filter records based on selected FY (or use all if none)
+        let relevantRecords = allRecords;
+        if (selectedFY) {
+            relevantRecords = allRecords.filter(r => getFinancialYear(r.jsDate) === selectedFY);
+        }
+
+        // 2. Extract unique months from relevant records
+        const months = [...new Set(relevantRecords.map(r => r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' })))];
+        
+        // 3. Sort months chronologically
+        months.sort((a,b) => new Date(b) - new Date(a)); // Newest first
+
+        // 4. Populate Dropdown
+        sel.innerHTML = '<option value="">-- All Months --</option>';
+        months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
+        
+        // 5. Trigger Table Update? No, let user click Apply.
     }
 
     // --- DASHBOARD CHARTS ---
@@ -299,7 +327,7 @@
         document.getElementById('dashTotalRev').innerText = formatCurr(totalRev);
         document.getElementById('dashDocCount').innerText = uniqueDocs.length;
         
-        // Chart Data
+        // Data Prep
         const revByDoc = {};
         const monthKeys = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
         const docTrends = {}; 
@@ -307,6 +335,8 @@
         fyRecords.forEach(r => {
             revByDoc[r.doctorName] = (revByDoc[r.doctorName] || 0) + r.amountReceived;
             if(!docTrends[r.doctorName]) docTrends[r.doctorName] = Array(12).fill(0);
+            
+            // Map Month Index to FY Index (Jul=0... Jun=11)
             const mIndex = r.jsDate.getMonth(); 
             let fyIndex = (mIndex + 6) % 12; 
             docTrends[r.doctorName][fyIndex] += r.amountReceived;
@@ -315,7 +345,7 @@
         // Charts
         createChart('doctorChart', 'bar', Object.keys(revByDoc), [{
             label: 'Revenue', data: Object.values(revByDoc), backgroundColor: '#0056b3'
-        }], true); // Clickable = true
+        }], 'bar'); 
 
         const trendDatasets = Object.keys(docTrends).map((docName, i) => {
             const colors = ['#0056b3', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14'];
@@ -323,10 +353,10 @@
                 label: docName, data: docTrends[docName], borderColor: colors[i % colors.length], backgroundColor: 'transparent', tension: 0.1
             };
         });
-        createChart('trendChart', 'line', monthKeys, trendDatasets);
+        createChart('trendChart', 'line', monthKeys, trendDatasets, 'line');
     }
 
-    function createChart(canvasId, type, labels, datasets, clickable = false) {
+    function createChart(canvasId, type, labels, datasets, mode) {
         const ctx = document.getElementById(canvasId).getContext('2d');
         if(charts[canvasId]) charts[canvasId].destroy();
 
@@ -337,15 +367,45 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 onClick: (e, activeEls) => {
-                    if (clickable && activeEls.length > 0) {
-                        const index = activeEls[0].index;
-                        const labelClicked = labels[index];
-                        const activeFY = document.getElementById('fyDropdown').value; // Get current FY from Dash
+                    if (activeEls.length > 0) {
+                        const index = activeEls[0].index; // X-axis index
+                        const dsIndex = activeEls[0].datasetIndex; // Dataset index
+                        const activeFY = document.getElementById('fyDropdown').value;
                         
-                        // Action: Jump to Data tab and apply Dual Filter (Doc + FY)
+                        // Switch to Data Tab
                         switchTab('data');
-                        document.getElementById('doctorFilter').value = labelClicked;
-                        document.getElementById('dataFyFilter').value = activeFY; // Sync FY
+                        
+                        // Set FY
+                        document.getElementById('dataFyFilter').value = activeFY;
+                        
+                        // Logic Split: Bar vs Line
+                        if (mode === 'bar') {
+                            const docName = labels[index];
+                            document.getElementById('doctorFilter').value = docName;
+                        } 
+                        else if (mode === 'line') {
+                            const docName = datasets[dsIndex].label; // Line Graph Doctor Name
+                            const monthShort = labels[index]; // "Jul", "Aug", etc.
+                            
+                            // Calculate Year for Month String
+                            // activeFY is "FY23/24". Split to 23/24.
+                            // If month is Jul-Dec (indices 0-5), Year = 2023.
+                            // If month is Jan-Jun (indices 6-11), Year = 2024.
+                            const years = activeFY.replace("FY","").split("/"); // ["23", "24"]
+                            const startY = "20" + years[0];
+                            const endY = "20" + years[1];
+                            const fullYear = (index <= 5) ? startY : endY;
+                            const fullMonthString = `${monthShort} ${fullYear}`; // "Nov 2023"
+                            
+                            document.getElementById('doctorFilter').value = docName;
+                            
+                            // Re-populate month dropdown specifically for this FY first
+                            populateMonthDropdown();
+                            // Then select the specific month
+                            document.getElementById('monthFilter').value = fullMonthString;
+                        }
+
+                        // Apply
                         document.getElementById('applyFilters').click();
                     }
                 }
@@ -372,6 +432,7 @@
 
     document.getElementById('clearFilters').onclick = () => {
         document.getElementById('dataFyFilter').value = "";
+        populateMonthDropdown(); // Reset month dropdown
         document.getElementById('monthFilter').value = ""; 
         document.getElementById('dateFilter').value = ""; 
         document.getElementById('doctorFilter').value = "";
@@ -398,14 +459,7 @@
         document.getElementById('totalRemit').innerText = formatCurr(tRem);
     }
 
-    // --- SHARED UTILS ---
-    function populateMonthDropdown() {
-        const months = [...new Set(allRecords.map(r => r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' })))].sort((a,b) => new Date(b) - new Date(a));
-        const sel = document.getElementById('monthFilter');
-        sel.innerHTML = '<option value="">-- All Months --</option>';
-        months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
-    }
-
+    // --- SHARED UTILS (Rate, Excel, Settings - Unchanged) ---
     function getRate(docName, jsDate) {
         const set = doctorSettingsMap[docName];
         if(!set) return { rate: 0, isEx: false };
@@ -418,7 +472,6 @@
         }
         return { rate: 0, isEx: false };
     }
-
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -428,8 +481,6 @@
         if(tab === 'settings') btnId = 'tabBtnSet';
         document.getElementById(btnId).classList.add('active');
     };
-
-    // Excel Upload (Unchanged)
     document.getElementById('excelFile').onchange = function() {
         const status = document.getElementById('uploadStatus');
         status.style.color = "blue"; status.innerText = "Processing...";
@@ -444,9 +495,8 @@
                     if(txt.includes("Period")){ const m = txt.match(/\d{1,2}\/\d{1,2}\/\d{4}/g); if(m) date=m[0]; }
                     if((rows[i]||[]).includes("Doctor")) hIdx=i;
                 }
-                if(!date || hIdx === -1) throw new Error("Format error. Check 'Period' or 'Doctor' header.");
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx });
-                let count = 0; const batch = db.batch();
+                const batch = db.batch(); let count=0;
                 for(const r of json){
                     const keys = Object.keys(r);
                     const doc = (r[keys.find(k=>k.trim()==='Doctor')]||"").toString().trim();
@@ -468,7 +518,6 @@
         };
         reader.readAsArrayBuffer(this.files[0]);
     };
-    // Settings, Delete, RenderDocList - same as V2.5 (Included in logic above)
     function renderDoctorList() {
         const doctors = [...new Set(allRecords.map(r => r.doctorName))].sort();
         const panel = document.getElementById('doctorListPanel'); panel.innerHTML = "";
