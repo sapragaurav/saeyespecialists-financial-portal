@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.11</title>
+    <title>SA Eye Specialists Portal - V1.12</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -95,7 +95,7 @@
             </table>
         </div>
     </div>
-    <div class="version-display">Build Version: 1.11</div>
+    <div class="version-display">Build Version: 1.12</div>
 </div>
 
 <script>
@@ -112,7 +112,6 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
     
-    // Cache for all records to enable fast filtering
     let allRecords = []; 
 
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
@@ -123,8 +122,6 @@
             .catch(err => alert("Login Failed: " + err.message));
     }
     document.getElementById('loginBtn').onclick = performLogin;
-    
-    // Enable "Enter" key for login
     document.getElementById('password').addEventListener("keyup", function(event) {
         if (event.key === "Enter") performLogin();
     });
@@ -135,7 +132,7 @@
         if (user) {
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('portalSection').classList.remove('hidden');
-            fetchAllData(); // Load everything once on login
+            fetchAllData();
         }
     });
 
@@ -145,8 +142,7 @@
             allRecords = [];
             snapshot.forEach(doc => {
                 let d = doc.data();
-                d.id = doc.id; // Store ID for deletion
-                // Helper: Parse DD/MM/YYYY to JS Date Object for sorting
+                d.id = doc.id;
                 const parts = d.reportDate.split('/');
                 d.jsDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); 
                 allRecords.push(d);
@@ -160,13 +156,11 @@
         const monthSet = new Set();
         allRecords.forEach(r => {
             if(r.jsDate && !isNaN(r.jsDate)) {
-                // Format: "Nov 2025"
                 const monthStr = r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
                 monthSet.add(monthStr);
             }
         });
 
-        // Sort months descending (Newest first)
         const sortedMonths = Array.from(monthSet).sort((a, b) => {
             const dateA = new Date("01 " + a);
             const dateB = new Date("01 " + b);
@@ -185,7 +179,6 @@
         let sumBilled = 0, sumReceived = 0;
         tbody.innerHTML = "";
 
-        // Sort data by Date (Newest first) for display
         data.sort((a, b) => b.jsDate - a.jsDate);
 
         data.forEach(d => {
@@ -205,10 +198,46 @@
         document.getElementById('totalReceived').innerText = formatCurr(sumReceived);
     }
 
+    // --- UX Sync Logic ---
+    
+    // 1. When Specific Date is picked -> Auto-select correct Month
+    document.getElementById('dateFilter').onchange = function() {
+        const dateVal = this.value; // YYYY-MM-DD
+        if (dateVal) {
+            const dateObj = new Date(dateVal);
+            if (!isNaN(dateObj)) {
+                // Generate string like "Nov 2025"
+                const monthStr = dateObj.toLocaleString('default', { month: 'short', year: 'numeric' });
+                
+                // Check if this month exists in our dropdown
+                const dropdown = document.getElementById('monthFilter');
+                let found = false;
+                for (let i = 0; i < dropdown.options.length; i++) {
+                    if (dropdown.options[i].value === monthStr) {
+                        dropdown.selectedIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+                // If the selected date is in a month we have no data for, we can optionally set it to "All Time"
+                // or leave it as is. For now, we leave it to avoid confusing jumps if the data just hasn't loaded yet.
+            }
+        }
+        applyFilters();
+    };
+
+    // 2. When Month is picked -> Clear specific Date to avoid conflict
+    document.getElementById('monthFilter').onchange = function() {
+        // If user explicitly picks a month, the specific date might confuse things if it doesn't match.
+        // Strategy: Clear the date picker to focus user on the Month view.
+        document.getElementById('dateFilter').value = ""; 
+        applyFilters();
+    };
+
     // --- Filtering Logic ---
     function applyFilters() {
         const monthVal = document.getElementById('monthFilter').value;
-        const dateVal = document.getElementById('dateFilter').value; // YYYY-MM-DD
+        const dateVal = document.getElementById('dateFilter').value; 
         const docVal = document.getElementById('doctorFilter').value.toLowerCase();
 
         const filtered = allRecords.filter(r => {
@@ -222,7 +251,7 @@
                 if (rMonth !== monthVal) matchMonth = false;
             }
 
-            // Date Filter (Convert YYYY-MM-DD to DD/MM/YYYY comparison)
+            // Date Filter
             if (dateVal) {
                 const [y, m, d] = dateVal.split('-');
                 const formattedDate = `${d}/${m}/${y}`;
@@ -239,7 +268,6 @@
     }
 
     document.getElementById('applyFilters').onclick = applyFilters;
-    document.getElementById('monthFilter').onchange = applyFilters; // Auto-apply on dropdown change
     
     document.getElementById('clearFilters').onclick = () => {
         document.getElementById('monthFilter').value = "";
@@ -248,15 +276,14 @@
         renderTable(allRecords);
     };
 
-    // --- Actions ---
     window.deleteRecord = async function(id) {
         if(confirm("Permanently delete this record?")) {
             await db.collection("daily_reports").doc(id).delete();
-            fetchAllData(); // Refresh data
+            fetchAllData(); 
         }
     };
 
-    // --- Upload Logic (Same as V1.10) ---
+    // Upload Logic
     document.getElementById('uploadBtn').onclick = function() {
         const fileInput = document.getElementById('excelFile');
         const status = document.getElementById('status');
@@ -304,7 +331,7 @@
                 status.style.color = "green";
                 status.innerText = `✔ Success: ${count} synced.`;
                 fileInput.value = "";
-                fetchAllData(); // Refresh immediately
+                fetchAllData(); 
             } catch (err) { status.innerText = `Error: ${err.message}`; }
         };
         reader.readAsArrayBuffer(fileInput.files[0]);
