@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V3.0</title>
+    <title>SA Eye Specialists Portal - V3.1</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -80,12 +80,11 @@
     <div id="loginSection">
         <img src="logo.png" alt="SA Eye Specialists" class="login-logo" onerror="this.style.display='none'; document.getElementById('backupTitle').style.display='block';">
         <h2 id="backupTitle" style="color:#0056b3; display:none;">SA Eye Specialists</h2>
-        
         <p style="color:#666; margin-bottom:25px;">Financial Portal Login</p>
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.0</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.1</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -150,7 +149,6 @@
                 
                 <div style="flex:1; text-align:right; display:flex; justify-content:flex-end; gap:10px;">
                     <button class="btn btn-purple" onclick="generatePDF()">📄 Download PDF Report</button>
-                    
                     <input type="file" id="excelFile" class="hidden" accept=".xlsx, .xls">
                     <button class="btn btn-green" onclick="document.getElementById('excelFile').click()">+ Upload Excel</button>
                 </div>
@@ -210,14 +208,14 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 3.0</span>
+            <span>Build Version: 3.1</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
 </div>
 
 <script>
-    // --- FIREBASE & CHART SETUP ---
+    // --- SETUP ---
     const firebaseConfig = {
         apiKey: "AIzaSyAsCKNyHipM5kUKKqJ_klJ1J1l20E4iQ-k",
         authDomain: "saeyespecialists-portal.firebaseapp.com",
@@ -230,13 +228,11 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
     
-    // Globals
     let allRecords = [];
     let doctorSettingsMap = {};
     let charts = {};
     const DOCTOR_COLORS = ['#0056b3', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14', '#20c997', '#e83e8c', '#6f42c1'];
 
-    // Utils
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
     const parseDate = (str) => { if(!str) return new Date(0); const [d,m,y] = str.split('/'); return new Date(`${y}-${m}-${d}`); };
     const getFinancialYear = (d) => {
@@ -260,7 +256,7 @@
         }
     });
 
-    // --- MAIN LOGIC ---
+    // --- MAIN DATA LOADER (FIXED) ---
     async function loadAllData() {
         document.getElementById('dbStatus').innerText = "Status: Loading...";
         try {
@@ -271,51 +267,43 @@
             allRecords = []; rSnap.forEach(d => { let r=d.data(); r.id=d.id; r.jsDate=parseDate(r.reportDate); allRecords.push(r); });
 
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records`;
+            
+            // --- THE FIX: Initialize All Components ---
             initFYDropdowns();
+            populateMonthDropdown();
+            renderDashboard(allRecords); // Show Table
+            renderDoctorList(); // Show Settings List
+            // -----------------------------------------
         } catch (e) { document.getElementById('dbStatus').innerText = "Error: " + e.message; }
     }
 
-    // --- PDF GENERATION (OPTION A) ---
+    // --- PDF GENERATION ---
     window.generatePDF = function() {
         const docName = document.getElementById('doctorFilter').value;
         const monthFilter = document.getElementById('monthFilter').value;
         const fyFilter = document.getElementById('dataFyFilter').value;
-        
-        // Validation: Ensure a doctor is selected for Remittance Advice
         if(!docName) { alert("Please filter by a specific Doctor first."); return; }
         
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
-        // 1. Add Logo
         const logoImg = document.getElementById('pdfLogoSource');
-        if (logoImg.complete) {
-            doc.addImage(logoImg, 'PNG', 15, 10, 40, 15); // x, y, w, h
-        }
+        if (logoImg.complete) doc.addImage(logoImg, 'PNG', 15, 10, 40, 15);
         
-        // 2. Header Text
-        doc.setFontSize(16);
-        doc.text("Remittance Advice / Tax Invoice", 195, 20, { align: "right" });
-        
-        doc.setFontSize(10);
-        doc.setTextColor(100);
+        doc.setFontSize(16); doc.text("Remittance Advice / Tax Invoice", 195, 20, { align: "right" });
+        doc.setFontSize(10); doc.setTextColor(100);
         const reportPeriod = monthFilter ? monthFilter : (fyFilter || "All Time");
         doc.text(`Period: ${reportPeriod}`, 195, 27, { align: "right" });
         doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 195, 32, { align: "right" });
 
-        // 3. Doctor Details
-        doc.setFontSize(12);
-        doc.setTextColor(0);
-        doc.text(`To: ${docName}`, 15, 40);
+        doc.setFontSize(12); doc.setTextColor(0); doc.text(`To: ${docName}`, 15, 40);
         
-        // 4. Totals Calculation from current Table View
         const tRev = document.getElementById('totalReceived').innerText;
         const tFee = document.getElementById('totalFee').innerText;
         const tGST = document.getElementById('totalGST').innerText;
         const tRem = document.getElementById('totalRemit').innerText;
 
-        doc.setFillColor(240, 240, 240);
-        doc.rect(15, 45, 180, 25, 'F');
+        doc.setFillColor(240, 240, 240); doc.rect(15, 45, 180, 25, 'F');
         doc.setFontSize(10);
         doc.text("Total Received:", 20, 55);  doc.text(tRev, 60, 55, { align: "right" });
         doc.text("Service Fee:", 20, 62);    doc.text(tFee, 60, 62, { align: "right" });
@@ -323,43 +311,20 @@
         doc.setFontSize(12); doc.setFont(undefined, 'bold');
         doc.text("Total Remittance:", 100, 62); doc.text(tRem, 160, 62, { align: "right" });
 
-        // 5. Transaction Table
         doc.autoTable({
-            html: '#dataTableElement',
-            startY: 80,
-            theme: 'striped',
-            headStyles: { fillColor: [0, 86, 179] },
-            columns: [
-                { header: 'Date', dataKey: 0 },
-                { header: 'Location', dataKey: 2 },
-                { header: 'Received', dataKey: 3 },
-                { header: 'Fee', dataKey: 5 },
-                { header: 'GST', dataKey: 6 },
-                { header: 'Remit', dataKey: 7 },
-            ],
-            didParseCell: function(data) {
-                // Exclude the "Action" column (index 8) and "Doctor" (index 1) since it's redundant
-                if (data.column.index === 1 || data.column.index === 4 || data.column.index === 8) {
-                    data.cell.styles.display = 'none'; // Hide Doctor, Rate, Action cols
-                }
-            }
+            html: '#dataTableElement', startY: 80, theme: 'striped', headStyles: { fillColor: [0, 86, 179] },
+            columns: [ { header: 'Date', dataKey: 0 }, { header: 'Location', dataKey: 2 }, { header: 'Received', dataKey: 3 }, { header: 'Fee', dataKey: 5 }, { header: 'GST', dataKey: 6 }, { header: 'Remit', dataKey: 7 } ],
+            didParseCell: function(data) { if (data.column.index === 1 || data.column.index === 4 || data.column.index === 8) data.cell.styles.display = 'none'; }
         });
 
-        // 6. Footer
         const pageHeight = doc.internal.pageSize.height;
-        doc.setFontSize(8);
-        doc.setTextColor(150);
+        doc.setFontSize(8); doc.setTextColor(150);
         doc.text("SA Eye Specialists - Financial Portal", 105, pageHeight - 10, { align: "center" });
-
-        // Save
         const fileName = `Remittance_${docName}_${reportPeriod}.pdf`.replace(/[^a-z0-9]/gi, '_');
         doc.save(fileName);
     };
 
-    // --- REMAINING LOGIC (Same as V2.9 - Charts, Filters, Upload) ---
-    // (Collapsed for brevity, assuming V2.9 logic remains identical. 
-    // Key functions: initFYDropdowns, renderVisuals, renderDashboard, etc.)
-    
+    // --- DROPDOWNS ---
     function initFYDropdowns() {
         const fySet = new Set(); allRecords.forEach(r => fySet.add(getFinancialYear(r.jsDate)));
         const sortedFY = Array.from(fySet).sort().reverse();
@@ -383,18 +348,15 @@
         months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
     }
 
+    // --- VISUALS ---
     function renderVisuals() {
         const selectedFY = document.getElementById('fyDropdown').value;
         if(!allRecords.length || selectedFY === "No Data") return;
         const fyRecords = allRecords.filter(r => getFinancialYear(r.jsDate) === selectedFY);
 
-        // Stats
-        const totalRev = fyRecords.reduce((acc, r) => acc + r.amountReceived, 0);
-        const uniqueDocs = [...new Set(fyRecords.map(r => r.doctorName))];
-        document.getElementById('dashTotalRev').innerText = formatCurr(totalRev);
-        document.getElementById('dashDocCount').innerText = uniqueDocs.length;
+        document.getElementById('dashTotalRev').innerText = formatCurr(fyRecords.reduce((acc, r) => acc + r.amountReceived, 0));
+        document.getElementById('dashDocCount').innerText = [...new Set(fyRecords.map(r => r.doctorName))].length;
         
-        // Chart Prep
         const revByDoc = {}; const docTrends = {}; 
         fyRecords.forEach(r => {
             revByDoc[r.doctorName] = (revByDoc[r.doctorName] || 0) + r.amountReceived;
@@ -403,7 +365,6 @@
             docTrends[r.doctorName][fyIndex] += r.amountReceived;
         });
 
-        // Charts
         const docNames = Object.keys(revByDoc);
         const barDatasets = docNames.map((name, i) => ({ label: name, data: [revByDoc[name]], backgroundColor: DOCTOR_COLORS[i % DOCTOR_COLORS.length] }));
         createChart('doctorChart', 'bar', ['Revenue'], barDatasets, 'bar'); 
@@ -433,9 +394,8 @@
                         const activeFY = document.getElementById('fyDropdown').value;
                         switchTab('data'); document.getElementById('dataFyFilter').value = activeFY;
                         
-                        if (mode === 'bar') {
-                            document.getElementById('doctorFilter').value = datasets[dsIndex].label;
-                        } else if (mode === 'line') {
+                        if (mode === 'bar') { document.getElementById('doctorFilter').value = datasets[dsIndex].label; } 
+                        else if (mode === 'line') {
                             const docName = datasets[dsIndex].label; const monthShort = labels[index];
                             const years = activeFY.replace("FY","").split("/");
                             const year = (index <= 5) ? "20"+years[0] : "20"+years[1];
@@ -458,7 +418,7 @@
         }
     };
 
-    // Table & Logic
+    // --- TABLE ---
     document.getElementById('applyFilters').onclick = () => {
         const fy = document.getElementById('dataFyFilter').value;
         const m = document.getElementById('monthFilter').value;
@@ -476,7 +436,6 @@
         document.getElementById('monthFilter').value = ""; document.getElementById('doctorFilter').value = "";
         renderDashboard(allRecords);
     };
-
     function renderDashboard(data) {
         const tbody = document.getElementById('recordsTableBody'); tbody.innerHTML = "";
         let tRec=0, tFee=0, tGST=0, tRem=0;
@@ -491,7 +450,7 @@
         document.getElementById('totalGST').innerText = formatCurr(tGST); document.getElementById('totalRemit').innerText = formatCurr(tRem);
     }
     
-    // Excel, Settings, etc. (Standard Logic reused)
+    // --- SHARED UTILS ---
     function getRate(docName, jsDate) {
         const set = doctorSettingsMap[docName]; if(!set) return { rate: 0, isEx: false };
         const mStr = jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
