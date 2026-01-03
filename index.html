@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.10</title>
+    <title>SA Eye Specialists Portal - V1.11</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -11,17 +11,19 @@
     
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 1000px; position: relative; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 1100px; position: relative; }
         .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
         .btn-primary { background-color: #0056b3; color: white; }
+        .btn-green { background-color: #28a745; color: white; }
         .btn-danger { background-color: #dc3545; color: white; padding: 5px 10px; }
         .hidden { display: none; }
         .upload-box { border: 1px solid #ddd; padding: 15px; border-radius: 10px; background: #fcfcfc; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; justify-content: space-between; }
         .filter-bar { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; border: 1px solid #eee; flex-wrap: wrap; }
+        select, input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { background: #eee; padding: 10px; text-align: left; }
+        th { background: #eee; padding: 10px; text-align: left; cursor: pointer; }
         td { padding: 10px; border-bottom: 1px solid #eee; }
-        .total-row { font-weight: bold; background: #f0f7ff; }
+        .total-row { font-weight: bold; background: #e3f2fd; font-size: 14px; }
         .version-display { position: absolute; top: 10px; right: 15px; font-size: 10px; color: #bbb; }
     </style>
 </head>
@@ -32,30 +34,41 @@
         <h2>Clinic Login</h2>
         <input type="email" id="email" placeholder="Email" style="width:100%; padding:10px; margin:5px 0;">
         <input type="password" id="password" placeholder="Password" style="width:100%; padding:10px; margin:5px 0;">
-        <button class="btn btn-primary" style="width:100%" id="loginBtn">Sign In</button>
+        <button class="btn btn-primary" style="width:100%; margin-top:10px;" id="loginBtn">Sign In</button>
     </div>
 
     <div id="portalSection" class="hidden">
         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h2 style="margin:0;">Admin Financial Manager</h2>
+            <h2 style="margin:0;">Financial Dashboard</h2>
             <button id="logoutBtn" style="background:none; border:none; color: #d9534f; cursor:pointer; font-weight:bold;">Sign Out</button>
         </div>
 
         <div class="upload-box">
             <div>
-                <strong>Sync Daily Excel:</strong>
+                <strong>Sync Excel:</strong>
                 <input type="file" id="excelFile" accept=".xlsx, .xls">
             </div>
-            <button class="btn btn-primary" style="background-color:#28a745" id="uploadBtn">Process File</button>
+            <button class="btn btn-green" id="uploadBtn">Upload & Sync</button>
         </div>
-        <p id="status" style="text-align: center; font-weight: bold;"></p>
+        <p id="status" style="text-align: center; font-weight: bold; font-size: 14px;"></p>
 
         <div class="filter-bar">
-            <strong>Filters:</strong>
-            <input type="text" id="filterDate" placeholder="Date (DD/MM/YYYY)" style="padding:6px; border:1px solid #ccc; border-radius:4px;">
-            <input type="text" id="filterDoctor" placeholder="Doctor Name" style="padding:6px; border:1px solid #ccc; border-radius:4px;">
-            <button class="btn btn-primary" id="applyFilterBtn">Apply Filters</button>
-            <button class="btn" id="clearFilterBtn" style="background:#6c757d; color:white;">Clear</button>
+            <div>
+                <label>Monthly Report:</label>
+                <select id="monthFilter">
+                    <option value="">-- All Time --</option>
+                    </select>
+            </div>
+            <div>
+                <label>Specific Date:</label>
+                <input type="date" id="dateFilter">
+            </div>
+            <div>
+                <label>Doctor:</label>
+                <input type="text" id="doctorFilter" placeholder="Search Name...">
+            </div>
+            <button class="btn btn-primary" id="applyFilters">Apply</button>
+            <button class="btn" id="clearFilters" style="background:#6c757d; color:white;">Clear</button>
         </div>
 
         <div style="overflow-x:auto;">
@@ -73,7 +86,7 @@
                 <tbody id="recordsTableBody"></tbody>
                 <tfoot>
                     <tr class="total-row">
-                        <td colspan="3" style="text-align:right;">Filtered Totals:</td>
+                        <td colspan="3" style="text-align:right;">TOTALS:</td>
                         <td id="totalBilled">$0.00</td>
                         <td id="totalReceived">$0.00</td>
                         <td></td>
@@ -82,7 +95,7 @@
             </table>
         </div>
     </div>
-    <div class="version-display">Build Version: 1.10</div>
+    <div class="version-display">Build Version: 1.11</div>
 </div>
 
 <script>
@@ -98,71 +111,152 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
+    
+    // Cache for all records to enable fast filtering
+    let allRecords = []; 
 
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
 
-    document.getElementById('loginBtn').onclick = () => {
-        auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(err => alert(err.message));
-    };
+    // --- Login Logic ---
+    function performLogin() {
+        auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value)
+            .catch(err => alert("Login Failed: " + err.message));
+    }
+    document.getElementById('loginBtn').onclick = performLogin;
+    
+    // Enable "Enter" key for login
+    document.getElementById('password').addEventListener("keyup", function(event) {
+        if (event.key === "Enter") performLogin();
+    });
+
     document.getElementById('logoutBtn').onclick = () => auth.signOut().then(() => location.reload());
 
     auth.onAuthStateChanged(user => {
         if (user) {
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('portalSection').classList.remove('hidden');
-            loadRecords();
+            fetchAllData(); // Load everything once on login
         }
     });
 
-    async function deleteRecord(id) {
-        if(confirm("Are you sure you want to delete this specific record?")) {
-            await db.collection("daily_reports").doc(id).delete();
-            loadRecords();
-        }
-    }
-
-    function loadRecords() {
-        const dateF = document.getElementById('filterDate').value.trim();
-        const docF = document.getElementById('filterDoctor').value.trim().toLowerCase();
-        
-        let query = db.collection("daily_reports").orderBy("reportDate", "desc");
-
-        query.get().then(snapshot => {
-            const tbody = document.getElementById('recordsTableBody');
-            let sumBilled = 0, sumReceived = 0;
-            tbody.innerHTML = "";
-            
+    // --- Data Engine ---
+    function fetchAllData() {
+        db.collection("daily_reports").orderBy("lastUpdated", "desc").get().then(snapshot => {
+            allRecords = [];
             snapshot.forEach(doc => {
-                const d = doc.data();
-                const matchesDate = !dateF || d.reportDate === dateF;
-                const matchesDoc = !docF || d.doctorName.toLowerCase().includes(docF);
-
-                if (matchesDate && matchesDoc) {
-                    sumBilled += d.amountBilled;
-                    sumReceived += d.amountReceived;
-                    tbody.innerHTML += `<tr>
-                        <td>${d.reportDate}</td>
-                        <td>${d.doctorName}</td>
-                        <td>${d.location}</td>
-                        <td>${formatCurr(d.amountBilled)}</td>
-                        <td>${formatCurr(d.amountReceived)}</td>
-                        <td><button class="btn btn-danger" onclick="deleteRecord('${doc.id}')">Delete</button></td>
-                    </tr>`;
-                }
+                let d = doc.data();
+                d.id = doc.id; // Store ID for deletion
+                // Helper: Parse DD/MM/YYYY to JS Date Object for sorting
+                const parts = d.reportDate.split('/');
+                d.jsDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                allRecords.push(d);
             });
-
-            document.getElementById('totalBilled').innerText = formatCurr(sumBilled);
-            document.getElementById('totalReceived').innerText = formatCurr(sumReceived);
+            populateMonthDropdown();
+            renderTable(allRecords);
         });
     }
 
-    document.getElementById('applyFilterBtn').onclick = () => loadRecords();
-    document.getElementById('clearFilterBtn').onclick = () => {
-        document.getElementById('filterDate').value = "";
-        document.getElementById('filterDoctor').value = "";
-        loadRecords();
+    function populateMonthDropdown() {
+        const monthSet = new Set();
+        allRecords.forEach(r => {
+            if(r.jsDate && !isNaN(r.jsDate)) {
+                // Format: "Nov 2025"
+                const monthStr = r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+                monthSet.add(monthStr);
+            }
+        });
+
+        // Sort months descending (Newest first)
+        const sortedMonths = Array.from(monthSet).sort((a, b) => {
+            const dateA = new Date("01 " + a);
+            const dateB = new Date("01 " + b);
+            return dateB - dateA;
+        });
+
+        const select = document.getElementById('monthFilter');
+        select.innerHTML = '<option value="">-- All Time --</option>';
+        sortedMonths.forEach(m => {
+            select.innerHTML += `<option value="${m}">${m}</option>`;
+        });
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('recordsTableBody');
+        let sumBilled = 0, sumReceived = 0;
+        tbody.innerHTML = "";
+
+        // Sort data by Date (Newest first) for display
+        data.sort((a, b) => b.jsDate - a.jsDate);
+
+        data.forEach(d => {
+            sumBilled += d.amountBilled;
+            sumReceived += d.amountReceived;
+            tbody.innerHTML += `<tr>
+                <td>${d.reportDate}</td>
+                <td>${d.doctorName}</td>
+                <td>${d.location}</td>
+                <td>${formatCurr(d.amountBilled)}</td>
+                <td>${formatCurr(d.amountReceived)}</td>
+                <td><button class="btn btn-danger" onclick="deleteRecord('${d.id}')">Delete</button></td>
+            </tr>`;
+        });
+
+        document.getElementById('totalBilled').innerText = formatCurr(sumBilled);
+        document.getElementById('totalReceived').innerText = formatCurr(sumReceived);
+    }
+
+    // --- Filtering Logic ---
+    function applyFilters() {
+        const monthVal = document.getElementById('monthFilter').value;
+        const dateVal = document.getElementById('dateFilter').value; // YYYY-MM-DD
+        const docVal = document.getElementById('doctorFilter').value.toLowerCase();
+
+        const filtered = allRecords.filter(r => {
+            let matchMonth = true;
+            let matchDate = true;
+            let matchDoc = true;
+
+            // Month Filter
+            if (monthVal) {
+                const rMonth = r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+                if (rMonth !== monthVal) matchMonth = false;
+            }
+
+            // Date Filter (Convert YYYY-MM-DD to DD/MM/YYYY comparison)
+            if (dateVal) {
+                const [y, m, d] = dateVal.split('-');
+                const formattedDate = `${d}/${m}/${y}`;
+                if (r.reportDate !== formattedDate) matchDate = false;
+            }
+
+            // Doctor Filter
+            if (docVal && !r.doctorName.toLowerCase().includes(docVal)) matchDoc = false;
+
+            return matchMonth && matchDate && matchDoc;
+        });
+
+        renderTable(filtered);
+    }
+
+    document.getElementById('applyFilters').onclick = applyFilters;
+    document.getElementById('monthFilter').onchange = applyFilters; // Auto-apply on dropdown change
+    
+    document.getElementById('clearFilters').onclick = () => {
+        document.getElementById('monthFilter').value = "";
+        document.getElementById('dateFilter').value = "";
+        document.getElementById('doctorFilter').value = "";
+        renderTable(allRecords);
     };
 
+    // --- Actions ---
+    window.deleteRecord = async function(id) {
+        if(confirm("Permanently delete this record?")) {
+            await db.collection("daily_reports").doc(id).delete();
+            fetchAllData(); // Refresh data
+        }
+    };
+
+    // --- Upload Logic (Same as V1.10) ---
     document.getElementById('uploadBtn').onclick = function() {
         const fileInput = document.getElementById('excelFile');
         const status = document.getElementById('status');
@@ -188,6 +282,8 @@
                     if((rows[i] || []).includes("Doctor")) headerRowIndex = i;
                 }
 
+                if(!reportDate) throw new Error("No Date Found");
+
                 const jsonData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex });
                 let count = 0;
                 for (const row of jsonData) {
@@ -207,7 +303,8 @@
                 }
                 status.style.color = "green";
                 status.innerText = `✔ Success: ${count} synced.`;
-                loadRecords();
+                fileInput.value = "";
+                fetchAllData(); // Refresh immediately
             } catch (err) { status.innerText = `Error: ${err.message}`; }
         };
         reader.readAsArrayBuffer(fileInput.files[0]);
