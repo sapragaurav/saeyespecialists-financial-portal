@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.3</title>
+    <title>SA Eye Specialists Portal - V1.4</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -18,7 +18,7 @@
         .hidden { display: none; }
         .admin-badge { background: #e6ffed; color: #28a745; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 20px; }
         .upload-box { border: 2px dashed #007bff; padding: 20px; border-radius: 10px; margin-top: 20px; background: #f8fbff; }
-        #status { margin-top: 15px; font-size: 14px; color: #555; font-weight: bold; }
+        #status { margin-top: 15px; font-size: 14px; color: #555; font-weight: bold; white-space: pre-wrap; }
         .version-tag { font-size: 10px; color: #ccc; margin-top: 20px; display: block; }
     </style>
 </head>
@@ -47,7 +47,7 @@
         <p id="status"></p>
         <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
         <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
-        <span class="version-tag">Build Version 1.3</span>
+        <span class="version-tag">Build Version 1.4</span>
     </div>
 </div>
 
@@ -65,7 +65,6 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // Sign In Logic
     document.getElementById('loginBtn').onclick = () => {
         const e = document.getElementById('email').value;
         const p = document.getElementById('password').value;
@@ -84,7 +83,6 @@
         }
     });
 
-    // Excel Logic
     document.getElementById('uploadBtn').onclick = function() {
         const fileInput = document.getElementById('excelFile');
         const status = document.getElementById('status');
@@ -99,44 +97,49 @@
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                
-                // Convert to array of arrays to find the date row more reliably
                 const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
                 
                 let reportDate = "";
-                let headerRowIndex = 3; // Default
+                let headerRowIndex = -1;
 
-                // Look for the "Period" string in the first 5 rows
-                for(let i=0; i<5; i++) {
-                    const cellValue = rows[i] ? rows[i][0] : "";
-                    if(cellValue && cellValue.toString().includes("Period")) {
-                        const dateParts = cellValue.replace("Period", "").split("-");
-                        if(dateParts.length >= 2 && dateParts[0].trim() === dateParts[1].trim()) {
-                            reportDate = dateParts[0].trim();
+                for(let i=0; i < Math.min(rows.length, 10); i++) {
+                    const row = rows[i];
+                    if(!row || row.length === 0) continue;
+                    
+                    const firstCellText = row[0] ? row[0].toString().trim() : "";
+                    
+                    if(firstCellText.startsWith("Period")) {
+                        // Extract dates. Format: "Period27/03/2024 - 27/03/2024"
+                        const cleanText = firstCellText.replace("Period", "").trim();
+                        const parts = cleanText.split("-").map(p => p.trim());
+                        
+                        if(parts.length >= 2 && parts[0] === parts[1]) {
+                            reportDate = parts[0];
                         } else {
-                            throw new Error("Date range mismatch: " + cellValue);
+                            throw new Error(`Date check failed: Start (${parts[0]}) must match End (${parts[1]})`);
                         }
                     }
-                    // Look for the header row to know where data starts
-                    if(cellValue && cellValue.toString().includes("Doctor")) {
+                    
+                    if(row.includes("Doctor")) {
                         headerRowIndex = i;
                     }
                 }
 
-                if(!reportDate) throw new Error("Could not find a valid single-day 'Period' in the top rows.");
+                if(!reportDate) throw new Error("Could not find a valid single-day 'Period' (e.g., 27/03/2024 - 27/03/2024) in the report headers.");
+                if(headerRowIndex === -1) throw new Error("Could not find the 'Doctor' header row.");
 
-                // Convert data starting from header row
                 const jsonData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex });
                 const batch = db.batch();
                 let count = 0;
 
                 jsonData.forEach(row => {
-                    if (row['Doctor'] && !row['Doctor'].includes("Total:")) {
+                    const docName = row['Doctor'] ? row['Doctor'].toString().trim() : "";
+                    if (docName && !docName.includes("Total:")) {
                         const ref = db.collection("daily_reports").doc();
                         batch.set(ref, {
                             reportDate: reportDate,
-                            doctorName: row['Doctor'],
-                            location: row['Location'] || "N/A",
+                            doctorName: docName,
+                            location: row['Location'] || "All Locations",
                             amountBilled: parseFloat(row['Amount Billed']) || 0,
                             amountReceived: parseFloat(row['Amount Received']) || 0,
                             uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -144,6 +147,8 @@
                         count++;
                     }
                 });
+
+                if(count === 0) throw new Error("No doctor records found to upload.");
 
                 batch.commit().then(() => {
                     status.style.color = "green";
