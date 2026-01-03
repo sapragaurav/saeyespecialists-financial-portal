@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V2.1</title>
+    <title>SA Eye Specialists Portal - V2.2</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -11,35 +11,34 @@
     
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; padding: 0; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 1200px; position: relative; overflow: hidden; min-height: 85vh; }
+        .card { background: white; padding: 0; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 1200px; position: relative; overflow: hidden; min-height: 85vh; display: flex; flex-direction: column; }
         
-        /* Tabs & Header */
-        .tab-header { background: #f8f9fa; display: flex; border-bottom: 1px solid #dee2e6; align-items: stretch; }
-        .tab-btn { flex: 1; padding: 18px; border: none; background: none; cursor: pointer; font-size: 15px; font-weight: bold; color: #6c757d; border-bottom: 3px solid transparent; transition: all 0.2s; }
-        .tab-btn:hover { background: #e9ecef; }
-        .tab-btn.active { color: #0056b3; border-bottom: 3px solid #0056b3; background: white; }
-        .logout-wrapper { display: flex; align-items: center; padding: 0 20px; border-left: 1px solid #eee; }
+        /* HEADER & TABS */
+        .app-header { background: #fff; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; padding: 0; }
+        .tabs-area { display: flex; flex: 1; }
+        .tab-btn { padding: 20px 25px; border: none; background: none; cursor: pointer; font-size: 15px; font-weight: 600; color: #6c757d; border-bottom: 3px solid transparent; transition: 0.2s; }
+        .tab-btn:hover { background: #f8f9fa; color: #0056b3; }
+        .tab-btn.active { color: #0056b3; border-bottom: 3px solid #0056b3; background: #fff; }
         
-        .tab-content { display: none; padding: 30px; }
-        .tab-content.active { display: block; }
+        .user-area { padding: 0 20px; display: flex; align-items: center; gap: 15px; border-left: 1px solid #eee; height: 100%; }
+        .logout-btn { color: #dc3545; background: #fff0f0; border: 1px solid #ffc9c9; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
+        .logout-btn:hover { background: #dc3545; color: white; border-color: #dc3545; }
 
-        /* UI Components */
-        .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
-        .btn-primary { background-color: #0056b3; color: white; }
-        .btn-green { background-color: #28a745; color: white; }
-        .btn-danger { background-color: #dc3545; color: white; padding: 5px 10px; }
-        .hidden { display: none; }
+        /* CONTENT */
+        .tab-content { display: none; padding: 30px; flex: 1; }
+        .tab-content.active { display: block; }
         
-        /* Table & Dashboard */
+        /* DASHBOARD UI */
         .filter-bar { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 12px; align-items: center; border: 1px solid #eee; flex-wrap: wrap; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-        th { background: #f1f3f5; padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; }
+        th { background: #f1f3f5; padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; white-space: nowrap; }
         td { padding: 12px; border-bottom: 1px solid #eee; }
+        .money-col { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
         .total-row { font-weight: bold; background: #e7f3ff; font-size: 14px; }
-        
-        /* Settings Layout */
-        .settings-container { display: flex; gap: 30px; min-height: 500px; border-top: 1px solid #f0f0f0; padding-top: 20px; }
-        .doctor-list { width: 280px; border-right: 1px solid #eee; padding-right: 20px; }
+
+        /* SETTINGS UI */
+        .settings-container { display: flex; gap: 30px; height: 100%; min-height: 500px; border-top: 1px solid #f0f0f0; padding-top: 20px; }
+        .doctor-list { width: 280px; border-right: 1px solid #eee; padding-right: 20px; overflow-y: auto; max-height: 600px; }
         .doctor-item { padding: 12px; border-radius: 8px; cursor: pointer; margin-bottom: 8px; border: 1px solid transparent; background: #fcfcfc; transition: 0.2s; }
         .doctor-item:hover { background: #f0f2f5; border-color: #ddd; }
         .doctor-item.selected { background: #e7f1ff; color: #0056b3; font-weight: bold; border-color: #0056b3; }
@@ -47,9 +46,14 @@
         .config-panel { flex: 1; padding: 10px; }
         .rule-card { border: 1px solid #ddd; padding: 20px; border-radius: 10px; margin-bottom: 20px; background: #fff; }
         .input-group { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 6px; }
-        
-        .money-col { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
-        .version-display { position: absolute; bottom: 10px; left: 15px; font-size: 10px; color: #bbb; }
+
+        /* UTILS */
+        .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
+        .btn-primary { background-color: #0056b3; color: white; }
+        .btn-green { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; padding: 5px 10px; }
+        .hidden { display: none; }
+        .version-display { padding: 10px 20px; font-size: 11px; color: #999; border-top: 1px solid #eee; background: #fdfdfd; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
@@ -64,11 +68,14 @@
     </div>
 
     <div id="appSection" class="hidden">
-        <div class="tab-header">
-            <button class="tab-btn active" id="tabBtnDash" onclick="switchTab('dashboard')">Financial Dashboard</button>
-            <button class="tab-btn" id="tabBtnSet" onclick="switchTab('settings')">Doctor Settings (Fees)</button>
-            <div class="logout-wrapper">
-                <button id="logoutBtn" style="background:none; border:none; color:#dc3545; cursor:pointer; font-weight:bold; font-size:14px;">Sign Out</button>
+        <div class="app-header">
+            <div class="tabs-area">
+                <button class="tab-btn active" id="tabBtnDash" onclick="switchTab('dashboard')">Financial Dashboard</button>
+                <button class="tab-btn" id="tabBtnSet" onclick="switchTab('settings')">Doctor Settings (Fees)</button>
+            </div>
+            <div class="user-area">
+                <span id="userNameDisplay" style="font-size:13px; color:#555; font-weight:600;">Admin</span>
+                <button class="logout-btn" onclick="logout()">Sign Out</button>
             </div>
         </div>
 
@@ -84,10 +91,10 @@
                     <button class="btn btn-green" onclick="document.getElementById('excelFile').click()">+ Upload Excel</button>
                 </div>
             </div>
-            <p id="uploadStatus" style="text-align:center; font-size:13px; font-weight:bold;"></p>
+            <p id="uploadStatus" style="text-align:center; font-size:13px; font-weight:bold; height:20px;"></p>
 
             <div style="overflow-x:auto;">
-                <table id="mainTable">
+                <table>
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -120,12 +127,14 @@
         <div id="tab-settings" class="tab-content">
             <div class="settings-container">
                 <div class="doctor-list">
-                    <h3 style="margin-top:0; font-size:16px; color:#555;">Select Doctor</h3>
-                    <div id="doctorListPanel"></div>
+                    <h3 style="margin-top:0; font-size:14px; text-transform:uppercase; color:#888; letter-spacing:1px;">Doctor List</h3>
+                    <div id="doctorListPanel">
+                        <p style="color:#999; font-style:italic;">Loading...</p>
+                    </div>
                 </div>
 
                 <div class="config-panel" id="configPanel" style="display:none;">
-                    <h2 id="configTitle" style="margin-top:0; color:#0056b3; border-bottom:2px solid #eee; padding-bottom:10px;"></h2>
+                    <h2 id="configTitle" style="margin-top:0; color:#0056b3; border-bottom:2px solid #eee; padding-bottom:15px;"></h2>
                     
                     <div class="rule-card">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -143,16 +152,20 @@
                         <div id="exceptionsContainer"></div>
                     </div>
 
-                    <button class="btn btn-green" style="width:100%; padding:18px; font-size:16px; box-shadow:0 4px 12px rgba(40,167,69,0.2);" onclick="saveDoctorSettings()">SAVE CHANGES</button>
-                    <p id="saveStatus" style="text-align:center; font-weight:bold; margin-top:15px;"></p>
+                    <button class="btn btn-green" style="width:100%; padding:15px; font-size:16px;" onclick="saveDoctorSettings()">SAVE SETTINGS</button>
+                    <p id="saveStatus" style="text-align:center; font-weight:bold; margin-top:15px; color:green;"></p>
                 </div>
                 <div id="noDocSelected" style="flex:1; display:flex; align-items:center; justify-content:center; color:#999; font-style:italic;">
-                    Select a doctor from the left to manage their fees.
+                    Select a doctor from the list to view or edit fees.
                 </div>
             </div>
         </div>
+        
+        <div class="version-display">
+            <span>Build Version: 2.2</span>
+            <span id="dbStatus">System Status: Disconnected</span>
+        </div>
     </div>
-    <div class="version-display">Build Version: 2.1</div>
 </div>
 
 <script>
@@ -174,74 +187,68 @@
     let currentEditingDoc = null;
 
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
-    const parseDate = (str) => { if(!str) return new Date(); const [d,m,y] = str.split('/'); return new Date(`${y}-${m}-${d}`); };
+    const parseDate = (str) => { if(!str) return new Date(0); const [d,m,y] = str.split('/'); return new Date(`${y}-${m}-${d}`); };
 
-    // --- Auth & Startup ---
-    document.getElementById('loginBtn').onclick = () => {
-        auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(err => alert(err.message));
-    };
-    document.getElementById('logoutBtn').onclick = () => auth.signOut().then(() => location.reload());
+    // AUTH
+    document.getElementById('loginBtn').onclick = () => auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(e => alert(e.message));
+    window.logout = () => auth.signOut().then(() => location.reload());
 
     auth.onAuthStateChanged(user => {
         if (user) {
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('appSection').classList.remove('hidden');
+            // Get user name
+            db.collection("users").doc(user.uid).get().then(doc => {
+                if(doc.exists) document.getElementById('userNameDisplay').innerText = doc.data().name;
+            });
             loadAllData();
         }
     });
 
+    // DATA LOADING (The Fix for Legacy Data)
     async function loadAllData() {
-        // 1. Load Settings
-        const sSnap = await db.collection("doctor_settings").get();
-        doctorSettingsMap = {};
-        sSnap.forEach(doc => doctorSettingsMap[doc.id] = doc.data());
-
-        // 2. Load Records
-        const rSnap = await db.collection("daily_reports").orderBy("lastUpdated", "desc").get();
-        allRecords = [];
-        rSnap.forEach(doc => {
-            let d = doc.data(); d.id = doc.id; d.jsDate = parseDate(d.reportDate);
-            allRecords.push(d);
-        });
-
-        // 3. UI Updates
-        populateMonthDropdown();
-        renderDashboard(allRecords);
-        renderDoctorList();
-    }
-
-    // --- Tab Management ---
-    window.switchTab = function(tab) {
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(`tab-${tab}`).classList.add('active');
-        if(tab === 'dashboard') document.getElementById('tabBtnDash').classList.add('active');
-        else document.getElementById('tabBtnSet').classList.add('active');
-    };
-
-    // --- Calculation Engine ---
-    function getRate(docName, jsDate) {
-        const set = doctorSettingsMap[docName];
-        if(!set) return { rate: 0, isEx: false };
+        const dbStat = document.getElementById('dbStatus');
+        dbStat.innerText = "System Status: Syncing Data...";
         
-        const mStr = jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
-        if(set.exceptions && set.exceptions[mStr] !== undefined) return { rate: parseFloat(set.exceptions[mStr]), isEx: true };
-        
-        if(set.timeline && set.timeline.length > 0) {
-            const sorted = [...set.timeline].sort((a,b) => new Date(b.startDate) - new Date(a.startDate));
-            const rule = sorted.find(r => new Date(r.startDate) <= jsDate);
-            if(rule) return { rate: parseFloat(rule.fee), isEx: false };
+        try {
+            // 1. Load Settings
+            const sSnap = await db.collection("doctor_settings").get();
+            doctorSettingsMap = {};
+            sSnap.forEach(doc => doctorSettingsMap[doc.id] = doc.data());
+
+            // 2. Load Records (WITHOUT sorting on server to catch old data)
+            const rSnap = await db.collection("daily_reports").get();
+            
+            allRecords = [];
+            rSnap.forEach(doc => {
+                let d = doc.data(); 
+                d.id = doc.id; 
+                d.jsDate = parseDate(d.reportDate);
+                allRecords.push(d);
+            });
+
+            dbStat.innerText = `System Status: Online | Loaded ${allRecords.length} records.`;
+            
+            // 3. Render
+            populateMonthDropdown();
+            renderDashboard(allRecords);
+            renderDoctorList();
+        } catch (err) {
+            dbStat.innerText = "System Status: Error - " + err.message;
+            console.error(err);
         }
-        return { rate: 0, isEx: false };
     }
 
-    // --- Dashboard ---
+    // DASHBOARD RENDER
     function renderDashboard(data) {
         const tbody = document.getElementById('recordsTableBody');
         tbody.innerHTML = "";
         let tRec=0, tFee=0, tGST=0, tRem=0;
 
-        data.sort((a,b) => b.jsDate - a.jsDate).forEach(d => {
+        // Sort Client Side (Safe)
+        data.sort((a,b) => b.jsDate - a.jsDate);
+
+        data.forEach(d => {
             const {rate, isEx} = getRate(d.doctorName, d.jsDate);
             const fee = d.amountReceived * (rate / 100);
             const gst = fee * 0.10;
@@ -254,14 +261,14 @@
 
             tbody.innerHTML += `<tr>
                 <td>${d.reportDate}</td>
-                <td style="font-weight:bold;">${d.doctorName}</td>
+                <td style="font-weight:600; color:#333;">${d.doctorName}</td>
                 <td style="color:#666;">${d.location}</td>
                 <td class="money-col">${formatCurr(d.amountReceived)}</td>
                 <td style="text-align:center;">${badge}</td>
                 <td class="money-col">${formatCurr(fee)}</td>
                 <td class="money-col">${formatCurr(gst)}</td>
                 <td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td>
-                <td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Delete</button></td>
+                <td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px; padding:4px 8px;" onclick="deleteRecord('${d.id}')">Del</button></td>
             </tr>`;
         });
 
@@ -271,12 +278,18 @@
         document.getElementById('totalRemit').innerText = formatCurr(tRem);
     }
 
-    // --- Doctor Settings ---
+    // DOCTOR SETTINGS
     function renderDoctorList() {
+        // Extract unique doctors
         const doctors = [...new Set(allRecords.map(r => r.doctorName))].sort();
         const panel = document.getElementById('doctorListPanel');
-        panel.innerHTML = doctors.length ? "" : "<p style='color:#999;'>No data found. Upload an Excel file first.</p>";
         
+        if (doctors.length === 0) {
+            panel.innerHTML = "<p style='color:#999; font-size:13px; padding:10px;'>No doctors found.<br>Upload an Excel file to start.</p>";
+            return;
+        }
+
+        panel.innerHTML = "";
         doctors.forEach(name => {
             const div = document.createElement('div');
             div.className = "doctor-item";
@@ -304,65 +317,57 @@
         Object.entries(set.exceptions || {}).forEach(([m, f]) => addExceptionRow(m, f));
     }
 
+    function getRate(docName, jsDate) {
+        const set = doctorSettingsMap[docName];
+        if(!set) return { rate: 0, isEx: false }; // Default 0% if not set
+        
+        const mStr = jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+        if(set.exceptions && set.exceptions[mStr] !== undefined) return { rate: parseFloat(set.exceptions[mStr]), isEx: true };
+        
+        if(set.timeline && set.timeline.length > 0) {
+            const sorted = [...set.timeline].sort((a,b) => new Date(b.startDate) - new Date(a.startDate));
+            const rule = sorted.find(r => new Date(r.startDate) <= jsDate);
+            if(rule) return { rate: parseFloat(rule.fee), isEx: false };
+        }
+        return { rate: 0, isEx: false };
+    }
+
+    // HELPER FUNCTIONS
+    window.switchTab = (tab) => {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.getElementById(tab === 'dashboard' ? 'tabBtnDash' : 'tabBtnSet').classList.add('active');
+    };
+
     window.addTimelineRow = (d="", f="") => {
         const div = document.createElement('div');
         div.className = "input-group";
-        div.innerHTML = `<label style="font-size:12px;">From:</label><input type="date" class="tl-d" value="${d}"><label style="font-size:12px;">Fee%:</label><input type="number" class="tl-f" value="${f}" style="width:70px;"><button class="btn btn-danger" style="padding:4px 8px;" onclick="this.parentElement.remove()">×</button>`;
+        div.innerHTML = `<label style="font-size:12px; width:40px;">From:</label><input type="date" class="tl-d" value="${d}"><label style="font-size:12px;">Fee%:</label><input type="number" class="tl-f" value="${f}" style="width:60px;"><button class="btn btn-danger" style="padding:4px 8px;" onclick="this.parentElement.remove()">×</button>`;
         document.getElementById('timelineContainer').appendChild(div);
     };
 
     window.addExceptionRow = (m="", f="") => {
         const div = document.createElement('div');
         div.className = "input-group";
-        div.innerHTML = `<input type="text" class="ex-m" value="${m}" placeholder="e.g. Nov 2025"><label style="font-size:12px;">Fee%:</label><input type="number" class="ex-f" value="${f}" style="width:70px;"><button class="btn btn-danger" style="padding:4px 8px;" onclick="this.parentElement.remove()">×</button>`;
+        div.innerHTML = `<input type="text" class="ex-m" value="${m}" placeholder="e.g. Nov 2025"><label style="font-size:12px;">Fee%:</label><input type="number" class="ex-f" value="${f}" style="width:60px;"><button class="btn btn-danger" style="padding:4px 8px;" onclick="this.parentElement.remove()">×</button>`;
         document.getElementById('exceptionsContainer').appendChild(div);
     };
 
     window.saveDoctorSettings = async () => {
-        const tl = []; document.querySelectorAll('.tl-d').forEach((el, i) => {
-            const f = document.querySelectorAll('.tl-f')[i].value;
-            if(el.value && f) tl.push({ startDate: el.value, fee: f });
-        });
-        const ex = {}; document.querySelectorAll('.ex-m').forEach((el, i) => {
-            const f = document.querySelectorAll('.ex-f')[i].value;
-            if(el.value && f) ex[el.value] = f;
-        });
-
+        const tl = []; document.querySelectorAll('.tl-d').forEach((el, i) => { const f = document.querySelectorAll('.tl-f')[i].value; if(el.value && f) tl.push({ startDate: el.value, fee: f }); });
+        const ex = {}; document.querySelectorAll('.ex-m').forEach((el, i) => { const f = document.querySelectorAll('.ex-f')[i].value; if(el.value && f) ex[el.value] = f; });
         await db.collection("doctor_settings").doc(currentEditingDoc).set({ timeline: tl, exceptions: ex });
-        document.getElementById('saveStatus').innerText = "✔ Saved Successfully!";
-        setTimeout(() => document.getElementById('saveStatus').innerText = "", 2000);
+        const status = document.getElementById('saveStatus');
+        status.innerText = "✔ Saved Successfully!";
+        setTimeout(() => status.innerText = "", 2000);
         loadAllData();
     };
-
-    // --- Filters & Excel (Existing Logic) ---
-    function populateMonthDropdown() {
-        const months = [...new Set(allRecords.map(r => r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' })))].sort((a,b) => new Date(b) - new Date(a));
-        const sel = document.getElementById('monthFilter');
-        sel.innerHTML = '<option value="">-- All Time --</option>';
-        months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
-    }
-
-    document.getElementById('applyFilters').onclick = () => {
-        const m = document.getElementById('monthFilter').value;
-        const d = document.getElementById('dateFilter').value;
-        const doc = document.getElementById('doctorFilter').value.toLowerCase();
-        const filtered = allRecords.filter(r => {
-            const matchM = !m || r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }) === m;
-            const matchD = !d || r.reportDate === d.split('-').reverse().join('/');
-            const matchDoc = !doc || r.doctorName.toLowerCase().includes(doc);
-            return matchM && matchD && matchDoc;
-        });
-        renderDashboard(filtered);
-    };
-
-    document.getElementById('clearFilters').onclick = () => {
-        document.getElementById('monthFilter').value = ""; document.getElementById('dateFilter').value = ""; document.getElementById('doctorFilter').value = "";
-        renderDashboard(allRecords);
-    };
-
+    
+    // EXCEL UPLOAD
     document.getElementById('excelFile').onchange = function() {
         const status = document.getElementById('uploadStatus');
-        status.style.color = "blue"; status.innerText = "Reading file...";
+        status.style.color = "blue"; status.innerText = "Processing...";
         const reader = new FileReader();
         reader.onload = async function(e) {
             try {
@@ -398,6 +403,31 @@
         reader.readAsArrayBuffer(this.files[0]);
     };
 
+    function populateMonthDropdown() {
+        const months = [...new Set(allRecords.map(r => r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' })))].sort((a,b) => new Date(b) - new Date(a));
+        const sel = document.getElementById('monthFilter');
+        sel.innerHTML = '<option value="">-- All Time --</option>';
+        months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
+    }
+
+    document.getElementById('applyFilters').onclick = () => {
+        const m = document.getElementById('monthFilter').value;
+        const d = document.getElementById('dateFilter').value;
+        const doc = document.getElementById('doctorFilter').value.toLowerCase();
+        const filtered = allRecords.filter(r => {
+            const matchM = !m || r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }) === m;
+            const matchD = !d || r.reportDate === d.split('-').reverse().join('/');
+            const matchDoc = !doc || r.doctorName.toLowerCase().includes(doc);
+            return matchM && matchD && matchDoc;
+        });
+        renderDashboard(filtered);
+    };
+
+    document.getElementById('clearFilters').onclick = () => {
+        document.getElementById('monthFilter').value = ""; document.getElementById('dateFilter').value = ""; document.getElementById('doctorFilter').value = "";
+        renderDashboard(allRecords);
+    };
+    
     window.deleteRecord = async (id) => { if(confirm("Delete record?")) { await db.collection("daily_reports").doc(id).delete(); loadAllData(); }};
 </script>
 </body>
