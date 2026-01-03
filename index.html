@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.7</title>
+    <title>SA Eye Specialists Portal - V1.8</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -49,7 +49,7 @@
         </div>
 
         <div class="table-container">
-            <h3>Recent Data Syncs</h3>
+            <h3>Recent Data Syncs (Last 20 Changes)</h3>
             <table>
                 <thead>
                     <tr><th>Date</th><th>Doctor</th><th>Location</th><th>Billed</th><th>Received</th></tr>
@@ -61,7 +61,7 @@
         <hr style="margin: 40px 0 20px 0; border: 0; border-top: 1px solid #eee;">
         <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
     </div>
-    <div class="version-display">Build Version: 1.7</div>
+    <div class="version-display">Build Version: 1.8</div>
 </div>
 
 <script>
@@ -101,15 +101,16 @@
         }
     });
 
+    // Sorting by lastUpdated so newly synced files appear first
     function loadRecentRecords() {
-        db.collection("daily_reports").orderBy("reportDate", "desc").limit(20).get().then(snapshot => {
+        db.collection("daily_reports").orderBy("lastUpdated", "desc").limit(20).get().then(snapshot => {
             const tbody = document.getElementById('recordsTableBody');
             tbody.innerHTML = "";
             snapshot.forEach(doc => {
                 const d = doc.data();
                 tbody.innerHTML += `<tr><td>${d.reportDate}</td><td>${d.doctorName}</td><td>${d.location}</td><td>${formatCurrency(d.amountBilled)}</td><td>${formatCurrency(d.amountReceived)}</td></tr>`;
             });
-        });
+        }).catch(err => console.error("Error loading table:", err));
     }
 
     document.getElementById('uploadBtn').onclick = function() {
@@ -146,7 +147,6 @@
                 let count = 0;
 
                 for (const row of jsonData) {
-                    // Fuzzy matching for column names to prevent "One Record" issue
                     const keys = Object.keys(row);
                     const docKey = keys.find(k => k.trim() === 'Doctor');
                     const locKey = keys.find(k => k.trim() === 'Location');
@@ -157,8 +157,8 @@
                     
                     if (docName && !docName.includes("Total:")) {
                         const location = row[locKey] || "N/A";
-                        // Unique ID based on Date, Doctor, and Location to prevent duplicates
-                        const uniqueId = `${reportDate}_${docName}_${location}`.replace(/\s+/g, '_');
+                        // Unique ID to overwrite existing data for the same Doctor/Date/Location
+                        const uniqueId = `${reportDate}_${docName}_${location}`.replace(/\//g, '-').replace(/\s+/g, '_');
                         
                         await db.collection("daily_reports").doc(uniqueId).set({
                             reportDate: reportDate,
@@ -173,9 +173,10 @@
                 }
 
                 status.style.color = "green";
-                status.innerText = `✔ Sync Complete: ${count} doctor records processed.`;
+                status.innerText = `✔ Sync Complete: ${count} records processed.`;
                 fileInput.value = "";
-                loadRecentRecords();
+                // Small delay to allow Firebase to process the timestamp before refreshing table
+                setTimeout(loadRecentRecords, 1000);
             } catch (err) {
                 status.style.color = "red";
                 status.innerText = "Error: " + err.message;
