@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.2</title>
+    <title>SA Eye Specialists Portal - V1.3</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -39,7 +39,7 @@
         
         <div class="upload-box">
             <h4 style="margin-top:0;">Daily Report Uploader</h4>
-            <p style="font-size: 12px; color: #666;">Select the Excel export from your SaaS.</p>
+            <p style="font-size: 12px; color: #666;">Upload your daily SaaS Excel export.</p>
             <input type="file" id="excelFile" accept=".xlsx, .xls">
             <button class="btn" id="uploadBtn" style="background-color: #28a745;">Process & Save to Firebase</button>
         </div>
@@ -47,7 +47,7 @@
         <p id="status"></p>
         <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
         <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
-        <span class="version-tag">Build Version 1.2</span>
+        <span class="version-tag">Build Version 1.3</span>
     </div>
 </div>
 
@@ -65,11 +65,11 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // --- Authentication Logic ---
+    // Sign In Logic
     document.getElementById('loginBtn').onclick = () => {
-        const email = document.getElementById('email').value;
-        const pass = document.getElementById('password').value;
-        auth.signInWithEmailAndPassword(email, pass).catch(err => alert("Login Error: " + err.message));
+        const e = document.getElementById('email').value;
+        const p = document.getElementById('password').value;
+        auth.signInWithEmailAndPassword(e, p).catch(err => alert("Login Error: " + err.message));
     };
 
     document.getElementById('logoutBtn').onclick = () => auth.signOut().then(() => location.reload());
@@ -79,249 +79,84 @@
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('portalSection').classList.remove('hidden');
             db.collection("users").doc(user.uid).get().then(doc => {
-                if (doc.exists) {
-                    document.getElementById('welcomeMsg').innerText = "Hello, " + doc.data().name;
-                }
+                if (doc.exists) document.getElementById('welcomeMsg').innerText = "Hello, " + doc.data().name;
             });
         }
     });
 
-    // --- Excel Processing Logic (The Core Engine) ---
+    // Excel Logic
     document.getElementById('uploadBtn').onclick = function() {
         const fileInput = document.getElementById('excelFile');
         const status = document.getElementById('status');
-        
-        if (!fileInput.files[0]) {
-            alert("Please select an Excel file first.");
-            return;
-        }
+        if (!fileInput.files[0]) { alert("Select a file first."); return; }
 
         status.style.color = "#555";
-        status.innerText = "Reading Excel data...";
+        status.innerText = "Processing file...";
         
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
-                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
                 
-                // 1. Extract and Validate Date (Cell A2)
-                const cellA2 = firstSheet['A2'] ? firstSheet['A2'].v : "";
-                const dateParts = cellA2.replace("Period", "").split(" - ");
+                // Convert to array of arrays to find the date row more reliably
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
                 
-                if (dateParts.length < 2 || dateParts[0].trim() !== dateParts[1].trim()) {
-                    throw new Error("Date validation failed. Cell A2 must show a single day (e.g., 27/03/2024 - 27/03/2024). Found: " + cellA2);
-                }
-                
-                const reportDate = dateParts[0].trim();
-                
-                // 2. Parse Rows (Starts from Range 3 - the 4th row)
-                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { range: 3 });
-                
-                status.innerText = "Connecting to Firebase...";
-                const batch = db.batch();
-                let uploadCount = 0;
+                let reportDate = "";
+                let headerRowIndex = 3; // Default
 
-                jsonData.forEach((row) => {
-                    // Filter: Ensure it is a doctor row and not the Total row
+                // Look for the "Period" string in the first 5 rows
+                for(let i=0; i<5; i++) {
+                    const cellValue = rows[i] ? rows[i][0] : "";
+                    if(cellValue && cellValue.toString().includes("Period")) {
+                        const dateParts = cellValue.replace("Period", "").split("-");
+                        if(dateParts.length >= 2 && dateParts[0].trim() === dateParts[1].trim()) {
+                            reportDate = dateParts[0].trim();
+                        } else {
+                            throw new Error("Date range mismatch: " + cellValue);
+                        }
+                    }
+                    // Look for the header row to know where data starts
+                    if(cellValue && cellValue.toString().includes("Doctor")) {
+                        headerRowIndex = i;
+                    }
+                }
+
+                if(!reportDate) throw new Error("Could not find a valid single-day 'Period' in the top rows.");
+
+                // Convert data starting from header row
+                const jsonData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex });
+                const batch = db.batch();
+                let count = 0;
+
+                jsonData.forEach(row => {
                     if (row['Doctor'] && !row['Doctor'].includes("Total:")) {
-                        const docRef = db.collection("daily_reports").doc();
-                        batch.set(docRef, {
+                        const ref = db.collection("daily_reports").doc();
+                        batch.set(ref, {
                             reportDate: reportDate,
                             doctorName: row['Doctor'],
-                            location: row['Location'],
+                            location: row['Location'] || "N/A",
                             amountBilled: parseFloat(row['Amount Billed']) || 0,
                             amountReceived: parseFloat(row['Amount Received']) || 0,
-                            uploadTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                            uploadedBy: auth.currentUser.uid
+                            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
-                        uploadCount++;
+                        count++;
                     }
                 });
 
-                if (uploadCount === 0) {
-                    throw new Error("No valid doctor records found in this file.");
-                }
-
                 batch.commit().then(() => {
                     status.style.color = "green";
-                    status.innerHTML = `✔ Success! ${uploadCount} records saved for ${reportDate}.`;
-                    fileInput.value = ""; 
+                    status.innerText = `✔ Success: ${count} records saved for ${reportDate}`;
+                    fileInput.value = "";
                 });
-
             } catch (err) {
                 status.style.color = "red";
                 status.innerText = "Error: " + err.message;
-                console.error(err);
             }
         };
         reader.readAsArrayBuffer(fileInput.files[0]);
     };
 </script>
-
-</body>
-</html><!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.2</title>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        .btn { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
-        .btn:hover { background-color: #004494; }
-        .hidden { display: none; }
-        .admin-badge { background: #e6ffed; color: #28a745; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 20px; }
-        .upload-box { border: 2px dashed #007bff; padding: 20px; border-radius: 10px; margin-top: 20px; background: #f8fbff; }
-        #status { margin-top: 15px; font-size: 14px; color: #555; font-weight: bold; }
-        .version-tag { font-size: 10px; color: #ccc; margin-top: 20px; display: block; }
-    </style>
-</head>
-<body>
-
-<div class="card">
-    <div id="loginSection">
-        <h2 style="margin-bottom: 5px;">SA Eye Specialists</h2>
-        <p style="color: #666; margin-bottom: 20px;">Financial Reporting Portal</p>
-        <input type="email" id="email" placeholder="Email Address">
-        <input type="password" id="password" placeholder="Password">
-        <button class="btn" id="loginBtn">Sign In</button>
-    </div>
-
-    <div id="portalSection" class="hidden">
-        <div class="admin-badge">SUPER ADMIN</div>
-        <h2 id="welcomeMsg" style="margin-top: 0;">Welcome</h2>
-        
-        <div class="upload-box">
-            <h4 style="margin-top:0;">Daily Report Uploader</h4>
-            <p style="font-size: 12px; color: #666;">Select the Excel export from your SaaS.</p>
-            <input type="file" id="excelFile" accept=".xlsx, .xls">
-            <button class="btn" id="uploadBtn" style="background-color: #28a745;">Process & Save to Firebase</button>
-        </div>
-        
-        <p id="status"></p>
-        <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
-        <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
-        <span class="version-tag">Build Version 1.2</span>
-    </div>
-</div>
-
-<script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyAsCKNyHipM5kUKKqJ_klJ1J1l20E4iQ-k",
-        authDomain: "saeyespecialists-portal.firebaseapp.com",
-        projectId: "saeyespecialists-portal",
-        storageBucket: "saeyespecialists-portal.firebasestorage.app",
-        messagingSenderId: "584706843504",
-        appId: "1:584706843504:web:9b7e3e5307f162de55e5b5"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-
-    // --- Authentication Logic ---
-    document.getElementById('loginBtn').onclick = () => {
-        const email = document.getElementById('email').value;
-        const pass = document.getElementById('password').value;
-        auth.signInWithEmailAndPassword(email, pass).catch(err => alert("Login Error: " + err.message));
-    };
-
-    document.getElementById('logoutBtn').onclick = () => auth.signOut().then(() => location.reload());
-
-    auth.onAuthStateChanged(user => {
-        if (user) {
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('portalSection').classList.remove('hidden');
-            db.collection("users").doc(user.uid).get().then(doc => {
-                if (doc.exists) {
-                    document.getElementById('welcomeMsg').innerText = "Hello, " + doc.data().name;
-                }
-            });
-        }
-    });
-
-    // --- Excel Processing Logic (The Core Engine) ---
-    document.getElementById('uploadBtn').onclick = function() {
-        const fileInput = document.getElementById('excelFile');
-        const status = document.getElementById('status');
-        
-        if (!fileInput.files[0]) {
-            alert("Please select an Excel file first.");
-            return;
-        }
-
-        status.style.color = "#555";
-        status.innerText = "Reading Excel data...";
-        
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                
-                // 1. Extract and Validate Date (Cell A2)
-                const cellA2 = firstSheet['A2'] ? firstSheet['A2'].v : "";
-                const dateParts = cellA2.replace("Period", "").split(" - ");
-                
-                if (dateParts.length < 2 || dateParts[0].trim() !== dateParts[1].trim()) {
-                    throw new Error("Date validation failed. Cell A2 must show a single day (e.g., 27/03/2024 - 27/03/2024). Found: " + cellA2);
-                }
-                
-                const reportDate = dateParts[0].trim();
-                
-                // 2. Parse Rows (Starts from Range 3 - the 4th row)
-                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { range: 3 });
-                
-                status.innerText = "Connecting to Firebase...";
-                const batch = db.batch();
-                let uploadCount = 0;
-
-                jsonData.forEach((row) => {
-                    // Filter: Ensure it is a doctor row and not the Total row
-                    if (row['Doctor'] && !row['Doctor'].includes("Total:")) {
-                        const docRef = db.collection("daily_reports").doc();
-                        batch.set(docRef, {
-                            reportDate: reportDate,
-                            doctorName: row['Doctor'],
-                            location: row['Location'],
-                            amountBilled: parseFloat(row['Amount Billed']) || 0,
-                            amountReceived: parseFloat(row['Amount Received']) || 0,
-                            uploadTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                            uploadedBy: auth.currentUser.uid
-                        });
-                        uploadCount++;
-                    }
-                });
-
-                if (uploadCount === 0) {
-                    throw new Error("No valid doctor records found in this file.");
-                }
-
-                batch.commit().then(() => {
-                    status.style.color = "green";
-                    status.innerHTML = `✔ Success! ${uploadCount} records saved for ${reportDate}.`;
-                    fileInput.value = ""; 
-                });
-
-            } catch (err) {
-                status.style.color = "red";
-                status.innerText = "Error: " + err.message;
-                console.error(err);
-            }
-        };
-        reader.readAsArrayBuffer(fileInput.files[0]);
-    };
-</script>
-
 </body>
 </html>
