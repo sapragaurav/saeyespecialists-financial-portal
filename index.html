@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V2.2</title>
+    <title>SA Eye Specialists Portal - V2.3</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -12,6 +12,10 @@
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .card { background: white; padding: 0; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 1200px; position: relative; overflow: hidden; min-height: 85vh; display: flex; flex-direction: column; }
+        
+        /* LOGIN PAGE */
+        #loginSection { padding: 60px 30px; text-align: center; max-width: 400px; margin: auto; }
+        .login-input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         
         /* HEADER & TABS */
         .app-header { background: #fff; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; padding: 0; }
@@ -22,32 +26,28 @@
         
         .user-area { padding: 0 20px; display: flex; align-items: center; gap: 15px; border-left: 1px solid #eee; height: 100%; }
         .logout-btn { color: #dc3545; background: #fff0f0; border: 1px solid #ffc9c9; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
-        .logout-btn:hover { background: #dc3545; color: white; border-color: #dc3545; }
 
         /* CONTENT */
         .tab-content { display: none; padding: 30px; flex: 1; }
         .tab-content.active { display: block; }
         
-        /* DASHBOARD UI */
+        /* DASHBOARD */
         .filter-bar { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 12px; align-items: center; border: 1px solid #eee; flex-wrap: wrap; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-        th { background: #f1f3f5; padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; white-space: nowrap; }
+        th { background: #f1f3f5; padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; }
         td { padding: 12px; border-bottom: 1px solid #eee; }
         .money-col { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; }
         .total-row { font-weight: bold; background: #e7f3ff; font-size: 14px; }
 
-        /* SETTINGS UI */
+        /* SETTINGS */
         .settings-container { display: flex; gap: 30px; height: 100%; min-height: 500px; border-top: 1px solid #f0f0f0; padding-top: 20px; }
-        .doctor-list { width: 280px; border-right: 1px solid #eee; padding-right: 20px; overflow-y: auto; max-height: 600px; }
+        .doctor-list { width: 280px; border-right: 1px solid #eee; padding-right: 20px; overflow-y: auto; }
         .doctor-item { padding: 12px; border-radius: 8px; cursor: pointer; margin-bottom: 8px; border: 1px solid transparent; background: #fcfcfc; transition: 0.2s; }
-        .doctor-item:hover { background: #f0f2f5; border-color: #ddd; }
         .doctor-item.selected { background: #e7f1ff; color: #0056b3; font-weight: bold; border-color: #0056b3; }
         
-        .config-panel { flex: 1; padding: 10px; }
-        .rule-card { border: 1px solid #ddd; padding: 20px; border-radius: 10px; margin-bottom: 20px; background: #fff; }
         .input-group { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 6px; }
 
-        /* UTILS */
+        /* GLOBAL */
         .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
         .btn-primary { background-color: #0056b3; color: white; }
         .btn-green { background-color: #28a745; color: white; }
@@ -59,12 +59,13 @@
 <body>
 
 <div class="card">
-    <div id="loginSection" style="padding: 60px 30px; text-align: center; max-width: 400px; margin: auto;">
+    <div id="loginSection">
         <h2 style="color:#0056b3;">SA Eye Specialists</h2>
         <p style="color:#666; margin-bottom:25px;">Financial Management Portal</p>
-        <input type="email" id="email" placeholder="Email Address" style="width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; border-radius:6px; box-sizing:border-box;">
-        <input type="password" id="password" placeholder="Password" style="width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; border-radius:6px; box-sizing:border-box;">
+        <input type="email" id="email" class="login-input" placeholder="Email Address">
+        <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build Version: 2.3</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -97,27 +98,18 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Doctor</th>
-                            <th>Location</th>
-                            <th class="money-col">Received</th>
-                            <th style="text-align:center;">Rate</th>
-                            <th class="money-col">Service Fee</th>
-                            <th class="money-col">GST</th>
-                            <th class="money-col">Remittance</th>
-                            <th style="text-align:center;">Action</th>
+                            <th>Date</th><th>Doctor</th><th>Location</th><th class="money-col">Received</th>
+                            <th style="text-align:center;">Rate</th><th class="money-col">Service Fee</th>
+                            <th class="money-col">GST</th><th class="money-col">Remittance</th><th style="text-align:center;">Action</th>
                         </tr>
                     </thead>
                     <tbody id="recordsTableBody"></tbody>
                     <tfoot>
                         <tr class="total-row">
                             <td colspan="3" style="text-align:right;">TOTALS:</td>
-                            <td class="money-col" id="totalReceived">$0.00</td>
-                            <td></td>
-                            <td class="money-col" id="totalFee">$0.00</td>
-                            <td class="money-col" id="totalGST">$0.00</td>
-                            <td class="money-col" id="totalRemit">$0.00</td>
-                            <td></td>
+                            <td class="money-col" id="totalReceived">$0.00</td><td></td>
+                            <td class="money-col" id="totalFee">$0.00</td><td class="money-col" id="totalGST">$0.00</td>
+                            <td class="money-col" id="totalRemit">$0.00</td><td></td>
                         </tr>
                     </tfoot>
                 </table>
@@ -127,43 +119,37 @@
         <div id="tab-settings" class="tab-content">
             <div class="settings-container">
                 <div class="doctor-list">
-                    <h3 style="margin-top:0; font-size:14px; text-transform:uppercase; color:#888; letter-spacing:1px;">Doctor List</h3>
-                    <div id="doctorListPanel">
-                        <p style="color:#999; font-style:italic;">Loading...</p>
-                    </div>
+                    <h3 style="margin-top:0; font-size:14px; text-transform:uppercase; color:#888;">Doctor List</h3>
+                    <div id="doctorListPanel"></div>
                 </div>
-
                 <div class="config-panel" id="configPanel" style="display:none;">
                     <h2 id="configTitle" style="margin-top:0; color:#0056b3; border-bottom:2px solid #eee; padding-bottom:15px;"></h2>
-                    
                     <div class="rule-card">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                            <strong style="font-size:15px;">📅 Fee Timeline (Standard Rates)</strong>
+                            <strong>📅 Fee Timeline</strong>
                             <button class="btn btn-primary" style="padding:5px 12px;" onclick="addTimelineRow()">+ Add Period</button>
                         </div>
                         <div id="timelineContainer"></div>
                     </div>
-
                     <div class="rule-card" style="border-left: 5px solid #ffc107;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                            <strong style="font-size:15px;">⚠️ One-off Monthly Exceptions</strong>
+                            <strong>⚠️ Monthly Exceptions</strong>
                             <button class="btn btn-primary" style="padding:5px 12px;" onclick="addExceptionRow()">+ Add Exception</button>
                         </div>
                         <div id="exceptionsContainer"></div>
                     </div>
-
                     <button class="btn btn-green" style="width:100%; padding:15px; font-size:16px;" onclick="saveDoctorSettings()">SAVE SETTINGS</button>
                     <p id="saveStatus" style="text-align:center; font-weight:bold; margin-top:15px; color:green;"></p>
                 </div>
                 <div id="noDocSelected" style="flex:1; display:flex; align-items:center; justify-content:center; color:#999; font-style:italic;">
-                    Select a doctor from the list to view or edit fees.
+                    Select a doctor to manage fees.
                 </div>
             </div>
         </div>
         
         <div class="version-display">
-            <span>Build Version: 2.2</span>
-            <span id="dbStatus">System Status: Disconnected</span>
+            <span>Build Version: 2.3</span>
+            <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
 </div>
@@ -189,116 +175,85 @@
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
     const parseDate = (str) => { if(!str) return new Date(0); const [d,m,y] = str.split('/'); return new Date(`${y}-${m}-${d}`); };
 
-    // AUTH
-    document.getElementById('loginBtn').onclick = () => auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(e => alert(e.message));
+    // --- FIX 2: Keyboard Enter to Login ---
+    const loginFunc = () => auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(e => alert(e.message));
+    document.getElementById('loginBtn').onclick = loginFunc;
+    document.getElementById('password').addEventListener("keypress", (e) => { if(e.key === "Enter") loginFunc(); });
+    document.getElementById('email').addEventListener("keypress", (e) => { if(e.key === "Enter") loginFunc(); });
+
     window.logout = () => auth.signOut().then(() => location.reload());
 
     auth.onAuthStateChanged(user => {
         if (user) {
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('appSection').classList.remove('hidden');
-            // Get user name
-            db.collection("users").doc(user.uid).get().then(doc => {
-                if(doc.exists) document.getElementById('userNameDisplay').innerText = doc.data().name;
-            });
             loadAllData();
         }
     });
 
-    // DATA LOADING (The Fix for Legacy Data)
     async function loadAllData() {
         const dbStat = document.getElementById('dbStatus');
-        dbStat.innerText = "System Status: Syncing Data...";
-        
+        dbStat.innerText = "Status: Loading Data...";
         try {
-            // 1. Load Settings
             const sSnap = await db.collection("doctor_settings").get();
             doctorSettingsMap = {};
             sSnap.forEach(doc => doctorSettingsMap[doc.id] = doc.data());
 
-            // 2. Load Records (WITHOUT sorting on server to catch old data)
             const rSnap = await db.collection("daily_reports").get();
-            
             allRecords = [];
-            rSnap.forEach(doc => {
-                let d = doc.data(); 
-                d.id = doc.id; 
-                d.jsDate = parseDate(d.reportDate);
-                allRecords.push(d);
-            });
+            rSnap.forEach(doc => { let d = doc.data(); d.id = doc.id; d.jsDate = parseDate(d.reportDate); allRecords.push(d); });
 
-            dbStat.innerText = `System Status: Online | Loaded ${allRecords.length} records.`;
-            
-            // 3. Render
+            dbStat.innerText = `Status: Online | ${allRecords.length} Records`;
             populateMonthDropdown();
             renderDashboard(allRecords);
             renderDoctorList();
         } catch (err) {
-            dbStat.innerText = "System Status: Error - " + err.message;
-            console.error(err);
+            dbStat.innerText = "Error: " + err.message;
         }
     }
 
-    // DASHBOARD RENDER
     function renderDashboard(data) {
         const tbody = document.getElementById('recordsTableBody');
         tbody.innerHTML = "";
         let tRec=0, tFee=0, tGST=0, tRem=0;
-
-        // Sort Client Side (Safe)
-        data.sort((a,b) => b.jsDate - a.jsDate);
-
-        data.forEach(d => {
+        data.sort((a,b) => b.jsDate - a.jsDate).forEach(d => {
             const {rate, isEx} = getRate(d.doctorName, d.jsDate);
             const fee = d.amountReceived * (rate / 100);
             const gst = fee * 0.10;
             const remit = d.amountReceived - (fee + gst);
-
             tRec += d.amountReceived; tFee += fee; tGST += gst; tRem += remit;
-
             const badge = isEx ? `<span style="background:#fff3cd; color:#856404; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}% (Ex)</span>` 
                                : `<span style="background:#e7f1ff; color:#0056b3; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}%</span>`;
-
-            tbody.innerHTML += `<tr>
-                <td>${d.reportDate}</td>
-                <td style="font-weight:600; color:#333;">${d.doctorName}</td>
-                <td style="color:#666;">${d.location}</td>
-                <td class="money-col">${formatCurr(d.amountReceived)}</td>
-                <td style="text-align:center;">${badge}</td>
-                <td class="money-col">${formatCurr(fee)}</td>
-                <td class="money-col">${formatCurr(gst)}</td>
-                <td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td>
-                <td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px; padding:4px 8px;" onclick="deleteRecord('${d.id}')">Del</button></td>
-            </tr>`;
+            tbody.innerHTML += `<tr><td>${d.reportDate}</td><td style="font-weight:600;">${d.doctorName}</td><td>${d.location}</td><td class="money-col">${formatCurr(d.amountReceived)}</td><td style="text-align:center;">${badge}</td><td class="money-col">${formatCurr(fee)}</td><td class="money-col">${formatCurr(gst)}</td><td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td><td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Del</button></td></tr>`;
         });
-
         document.getElementById('totalReceived').innerText = formatCurr(tRec);
         document.getElementById('totalFee').innerText = formatCurr(tFee);
         document.getElementById('totalGST').innerText = formatCurr(tGST);
         document.getElementById('totalRemit').innerText = formatCurr(tRem);
     }
 
-    // DOCTOR SETTINGS
+    function getRate(docName, jsDate) {
+        const set = doctorSettingsMap[docName];
+        if(!set) return { rate: 0, isEx: false };
+        const mStr = jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+        if(set.exceptions && set.exceptions[mStr] !== undefined) return { rate: parseFloat(set.exceptions[mStr]), isEx: true };
+        if(set.timeline && set.timeline.length > 0) {
+            const sorted = [...set.timeline].sort((a,b) => new Date(b.startDate) - new Date(a.startDate));
+            const rule = sorted.find(r => new Date(r.startDate) <= jsDate);
+            if(rule) return { rate: parseFloat(rule.fee), isEx: false };
+        }
+        return { rate: 0, isEx: false };
+    }
+
     function renderDoctorList() {
-        // Extract unique doctors
         const doctors = [...new Set(allRecords.map(r => r.doctorName))].sort();
         const panel = document.getElementById('doctorListPanel');
-        
-        if (doctors.length === 0) {
-            panel.innerHTML = "<p style='color:#999; font-size:13px; padding:10px;'>No doctors found.<br>Upload an Excel file to start.</p>";
-            return;
-        }
-
-        panel.innerHTML = "";
+        panel.innerHTML = doctors.length ? "" : "<p style='color:#999; font-size:12px;'>No doctors found.</p>";
         doctors.forEach(name => {
             const div = document.createElement('div');
             div.className = "doctor-item";
             div.innerText = name;
-            div.onclick = () => {
-                document.querySelectorAll('.doctor-item').forEach(i => i.classList.remove('selected'));
-                div.classList.add('selected');
-                openConfig(name);
-            };
+            div.onclick = () => { document.querySelectorAll('.doctor-item').forEach(i => i.classList.remove('selected')); div.classList.add('selected'); openConfig(name); };
             panel.appendChild(div);
         });
     }
@@ -308,31 +263,13 @@
         document.getElementById('noDocSelected').style.display = 'none';
         document.getElementById('configPanel').style.display = 'block';
         document.getElementById('configTitle').innerText = name;
-        
         const set = doctorSettingsMap[name] || { timeline: [], exceptions: {} };
         document.getElementById('timelineContainer').innerHTML = "";
         document.getElementById('exceptionsContainer').innerHTML = "";
-
         (set.timeline || []).forEach(r => addTimelineRow(r.startDate, r.fee));
         Object.entries(set.exceptions || {}).forEach(([m, f]) => addExceptionRow(m, f));
     }
 
-    function getRate(docName, jsDate) {
-        const set = doctorSettingsMap[docName];
-        if(!set) return { rate: 0, isEx: false }; // Default 0% if not set
-        
-        const mStr = jsDate.toLocaleString('default', { month: 'short', year: 'numeric' });
-        if(set.exceptions && set.exceptions[mStr] !== undefined) return { rate: parseFloat(set.exceptions[mStr]), isEx: true };
-        
-        if(set.timeline && set.timeline.length > 0) {
-            const sorted = [...set.timeline].sort((a,b) => new Date(b.startDate) - new Date(a.startDate));
-            const rule = sorted.find(r => new Date(r.startDate) <= jsDate);
-            if(rule) return { rate: parseFloat(rule.fee), isEx: false };
-        }
-        return { rate: 0, isEx: false };
-    }
-
-    // HELPER FUNCTIONS
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -341,16 +278,14 @@
     };
 
     window.addTimelineRow = (d="", f="") => {
-        const div = document.createElement('div');
-        div.className = "input-group";
+        const div = document.createElement('div'); div.className = "input-group";
         div.innerHTML = `<label style="font-size:12px; width:40px;">From:</label><input type="date" class="tl-d" value="${d}"><label style="font-size:12px;">Fee%:</label><input type="number" class="tl-f" value="${f}" style="width:60px;"><button class="btn btn-danger" style="padding:4px 8px;" onclick="this.parentElement.remove()">×</button>`;
         document.getElementById('timelineContainer').appendChild(div);
     };
 
     window.addExceptionRow = (m="", f="") => {
-        const div = document.createElement('div');
-        div.className = "input-group";
-        div.innerHTML = `<input type="text" class="ex-m" value="${m}" placeholder="e.g. Nov 2025"><label style="font-size:12px;">Fee%:</label><input type="number" class="ex-f" value="${f}" style="width:60px;"><button class="btn btn-danger" style="padding:4px 8px;" onclick="this.parentElement.remove()">×</button>`;
+        const div = document.createElement('div'); div.className = "input-group";
+        div.innerHTML = `<input type="text" class="ex-m" value="${m}" placeholder="e.g. Nov 2025"><label style="font-size:12px;">Fee%:</label><input type="number" class="ex-f" value="${f}" style="width:70px;"><button class="btn btn-danger" style="padding:4px 8px;" onclick="this.parentElement.remove()">×</button>`;
         document.getElementById('exceptionsContainer').appendChild(div);
     };
 
@@ -358,13 +293,11 @@
         const tl = []; document.querySelectorAll('.tl-d').forEach((el, i) => { const f = document.querySelectorAll('.tl-f')[i].value; if(el.value && f) tl.push({ startDate: el.value, fee: f }); });
         const ex = {}; document.querySelectorAll('.ex-m').forEach((el, i) => { const f = document.querySelectorAll('.ex-f')[i].value; if(el.value && f) ex[el.value] = f; });
         await db.collection("doctor_settings").doc(currentEditingDoc).set({ timeline: tl, exceptions: ex });
-        const status = document.getElementById('saveStatus');
-        status.innerText = "✔ Saved Successfully!";
-        setTimeout(() => status.innerText = "", 2000);
+        document.getElementById('saveStatus').innerText = "✔ Saved!";
+        setTimeout(() => document.getElementById('saveStatus').innerText = "", 2000);
         loadAllData();
     };
     
-    // EXCEL UPLOAD
     document.getElementById('excelFile').onchange = function() {
         const status = document.getElementById('uploadStatus');
         status.style.color = "blue"; status.innerText = "Processing...";
@@ -380,7 +313,6 @@
                     if((rows[i]||[]).includes("Doctor")) hIdx=i;
                 }
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx });
-                let count = 0;
                 for(const r of json){
                     const keys = Object.keys(r);
                     const doc = (r[keys.find(k=>k.trim()==='Doctor')]||"").toString().trim();
@@ -393,10 +325,9 @@
                             amountReceived: parseFloat(r[keys.find(k=>k.trim()==='Amount Received')])||0,
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                         }, {merge:true});
-                        count++;
                     }
                 }
-                status.style.color = "green"; status.innerText = `✔ ${count} Records Synced!`;
+                status.style.color = "green"; status.innerText = `✔ Success!`;
                 loadAllData();
             } catch(e) { status.style.color="red"; status.innerText=e.message; }
         };
@@ -428,7 +359,7 @@
         renderDashboard(allRecords);
     };
     
-    window.deleteRecord = async (id) => { if(confirm("Delete record?")) { await db.collection("daily_reports").doc(id).delete(); loadAllData(); }};
+    window.deleteRecord = async (id) => { if(confirm("Delete?")) { await db.collection("daily_reports").doc(id).delete(); loadAllData(); }};
 </script>
 </body>
 </html>
