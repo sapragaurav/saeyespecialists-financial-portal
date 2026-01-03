@@ -7,92 +7,106 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; padding-top: 50px; }
-        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        h2 { color: #333; text-align: center; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        .btn { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .btn:hover { background-color: #004494; }
         .hidden { display: none; }
-        #statusMsg { color: red; font-size: 14px; text-align: center; }
+        #statusMsg { color: #d9534f; font-size: 14px; margin-top: 10px; min-height: 20px; }
+        .admin-badge { background: #e6ffed; color: #28a745; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <div id="loginSection">
-        <h2>Clinic Login</h2>
+        <h2 style="margin-bottom: 5px;">SA Eye Specialists</h2>
+        <p style="color: #666; margin-bottom: 20px;">Financial Reporting Portal</p>
         <input type="email" id="email" placeholder="Email Address">
         <input type="password" id="password" placeholder="Password">
-        <button class="btn" onclick="login()">Sign In</button>
+        <button class="btn" id="loginBtn">Sign In</button>
         <p id="statusMsg"></p>
     </div>
 
     <div id="portalSection" class="hidden">
-        <h2 id="welcomeMsg">Welcome</h2>
+        <div id="roleBadge"></div>
+        <h2 id="welcomeMsg" style="margin-top: 0;">Welcome</h2>
         <div id="adminControls" class="hidden">
-            <p style="color: green; font-weight: bold;">Account Type: Super Admin</p>
-            <button class="btn" style="background: #28a745;">Go to Upload Tool</button>
+            <p>You have administrative access.</p>
+            <button class="btn" style="background-color: #28a745;">Upload Daily Excel</button>
         </div>
-        <div id="doctorControls" class="hidden">
-            <p style="color: blue; font-weight: bold;">Account Type: Doctor</p>
-            <button class="btn">View My Financials</button>
-        </div>
-        <br>
-        <button onclick="logout()" style="background:none; border:none; color:grey; cursor:pointer;">Sign Out</button>
+        <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
+        <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
     </div>
 </div>
 
 <script>
-    // 1. Paste your Firebase Config here
-    // Import the functions you need from the SDKs you need
-    import { initializeApp } from "firebase/app";
-    // TODO: Add SDKs for Firebase products that you want to use
-    // https://firebase.google.com/docs/web/setup#available-libraries
+    const firebaseConfig = {
+        apiKey: "AIzaSyAsCKNyHipM5kUKKqJ_klJ1J1l20E4iQ-k",
+        authDomain: "saeyespecialists-portal.firebaseapp.com",
+        projectId: "saeyespecialists-portal",
+        storageBucket: "saeyespecialists-portal.firebasestorage.app",
+        messagingSenderId: "584706843504",
+        appId: "1:584706843504:web:9b7e3e5307f162de55e5b5"
+    };
 
-    // Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyAsCKNyHipM5kUKKqJ_klJ1J1l20E4iQ-k",
-  authDomain: "saeyespecialists-portal.firebaseapp.com",
-  projectId: "saeyespecialists-portal",
-  storageBucket: "saeyespecialists-portal.firebasestorage.app",
-  messagingSenderId: "584706843504",
-  appId: "1:584706843504:web:9b7e3e5307f162de55e5b5"
-};
-
-    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // Login Function
-    function login() {
+    const loginBtn = document.getElementById('loginBtn');
+    const statusMsg = document.getElementById('statusMsg');
+
+    loginBtn.addEventListener('click', () => {
         const email = document.getElementById('email').value;
         const pass = document.getElementById('password').value;
+        
+        if(!email || !pass) {
+            statusMsg.innerText = "Please enter both email and password.";
+            return;
+        }
+
+        statusMsg.innerText = "Authenticating...";
+
         auth.signInWithEmailAndPassword(email, pass)
-            .catch(error => { document.getElementById('statusMsg').innerText = error.message; });
-    }
+            .then((userCredential) => {
+                console.log("Login Success");
+            })
+            .catch((error) => {
+                console.error("Login Error:", error);
+                statusMsg.innerText = "Login Failed: " + error.message;
+                alert("Login Error: " + error.message);
+            });
+    });
 
-    // Logout Function
-    function logout() { auth.signOut(); location.reload(); }
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+        auth.signOut().then(() => { location.reload(); });
+    });
 
-    // Logic to check "Who" is logged in
     auth.onAuthStateChanged(user => {
         if (user) {
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('portalSection').classList.remove('hidden');
             
-            // Check if user is Admin or Doctor in Database
-            db.collection("users").doc(user.uid).get().then(doc => {
+            db.collection("users").doc(user.uid).get()
+            .then(doc => {
                 if (doc.exists) {
                     const userData = doc.data();
                     document.getElementById('welcomeMsg').innerText = "Hello, " + userData.name;
                     if (userData.role === 'admin') {
+                        document.getElementById('roleBadge').innerHTML = '<span class="admin-badge">SUPER ADMIN</span>';
                         document.getElementById('adminControls').classList.remove('hidden');
-                    } else {
-                        document.getElementById('doctorControls').classList.remove('hidden');
                     }
+                } else {
+                    alert("Profile not found in Firestore for UID: " + user.uid);
+                    statusMsg.innerText = "Error: User profile not set up.";
                 }
+            })
+            .catch(err => {
+                alert("Database Error: " + err.message);
             });
         }
     });
