@@ -3,65 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.8</title>
+    <title>SA Eye Specialists Portal - V1.9</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; margin: 0; padding: 20px; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 900px; text-align: center; position: relative; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        .btn { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
-        .btn:hover { background-color: #004494; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 1000px; position: relative; }
+        .btn { padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        .btn-green { background-color: #28a745; }
         .hidden { display: none; }
-        .admin-badge { background: #e6ffed; color: #28a745; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 20px; }
-        .upload-box { border: 2px dashed #007bff; padding: 20px; border-radius: 10px; margin: 20px 0; background: #f8fbff; }
-        .table-container { margin-top: 30px; overflow-x: auto; text-align: left; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-        th { background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; padding: 12px; text-align: left; }
-        td { border-bottom: 1px solid #eee; padding: 12px; }
-        #status { margin-top: 15px; font-size: 14px; color: #555; font-weight: bold; }
+        .admin-badge { background: #e6ffed; color: #28a745; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 10px; }
+        .upload-box { border: 1px solid #ddd; padding: 15px; border-radius: 10px; background: #fcfcfc; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+        
+        .filter-bar { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center; border: 1px solid #eee; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background: #eee; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        .total-row { font-weight: bold; background: #f0f7ff; }
+        
+        #status { font-size: 13px; font-weight: bold; color: #555; }
         .version-display { position: absolute; top: 10px; right: 15px; font-size: 10px; color: #bbb; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <div id="loginSection">
-        <h2>SA Eye Specialists</h2>
-        <p style="color: #666; margin-bottom: 20px;">Financial Reporting Portal</p>
-        <input type="email" id="email" placeholder="Email Address">
-        <input type="password" id="password" placeholder="Password">
-        <button class="btn" id="loginBtn">Sign In</button>
+    <div id="loginSection" style="text-align: center; max-width: 400px; margin: auto;">
+        <h2>Clinic Login</h2>
+        <input type="email" id="email" placeholder="Email" style="width:100%; padding:10px; margin:5px 0;">
+        <input type="password" id="password" placeholder="Password" style="width:100%; padding:10px; margin:5px 0;">
+        <button class="btn" style="width:100%" id="loginBtn">Sign In</button>
     </div>
 
     <div id="portalSection" class="hidden">
         <div class="admin-badge">SUPER ADMIN</div>
-        <h2 id="welcomeMsg" style="margin-top: 0;">Welcome</h2>
-        
-        <div class="upload-box">
-            <h4 style="margin-top:0;">Daily Report Uploader</h4>
-            <input type="file" id="excelFile" accept=".xlsx, .xls">
-            <button class="btn" id="uploadBtn" style="background-color: #28a745;">Process & Sync Data</button>
-            <p id="status"></p>
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <h2 id="welcomeMsg" style="margin:0;">Dashboard</h2>
+            <button id="logoutBtn" style="background:none; border:none; color: #d9534f; cursor:pointer; font-weight:bold;">Sign Out</button>
         </div>
 
-        <div class="table-container">
-            <h3>Recent Data Syncs (Last 20 Changes)</h3>
+        <div class="upload-box">
+            <div>
+                <strong>Import Daily Data:</strong>
+                <input type="file" id="excelFile" accept=".xlsx, .xls" style="font-size: 12px;">
+            </div>
+            <button class="btn btn-green" id="uploadBtn">Sync Excel</button>
+        </div>
+        <p id="status" style="text-align: center;"></p>
+
+        <div class="filter-bar">
+            <strong>Filter Records:</strong>
+            <div>
+                <label style="font-size:12px;">Report Date:</label>
+                <input type="text" id="filterDate" placeholder="e.g. 29/03/2024" style="padding:5px; width:120px;">
+            </div>
+            <button class="btn" id="applyFilterBtn" style="padding: 6px 15px;">Apply Filter</button>
+            <button class="btn" id="clearFilterBtn" style="padding: 6px 15px; background: #6c757d;">Show All</button>
+        </div>
+
+        <div style="overflow-x:auto;">
             <table>
                 <thead>
-                    <tr><th>Date</th><th>Doctor</th><th>Location</th><th>Billed</th><th>Received</th></tr>
+                    <tr>
+                        <th>Date</th>
+                        <th>Doctor Name</th>
+                        <th>Location</th>
+                        <th>Billed</th>
+                        <th>Received</th>
+                    </tr>
                 </thead>
                 <tbody id="recordsTableBody"></tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="3" style="text-align:right;">Total for View:</td>
+                        <td id="totalBilled">$0.00</td>
+                        <td id="totalReceived">$0.00</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
-        
-        <hr style="margin: 40px 0 20px 0; border: 0; border-top: 1px solid #eee;">
-        <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
     </div>
-    <div class="version-display">Build Version: 1.8</div>
+    <div class="version-display">Build Version: 1.9</div>
 </div>
 
 <script>
@@ -81,54 +107,67 @@
     const formatCurrency = (num) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(num);
 
     document.getElementById('loginBtn').onclick = () => {
-        const e = document.getElementById('email').value;
-        const p = document.getElementById('password').value;
-        auth.signInWithEmailAndPassword(e, p).catch(err => alert(err.message));
+        auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(err => alert(err.message));
     };
-
     document.getElementById('logoutBtn').onclick = () => auth.signOut().then(() => location.reload());
 
     auth.onAuthStateChanged(user => {
         if (user) {
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('portalSection').classList.remove('hidden');
-            db.collection("users").doc(user.uid).get().then(doc => {
-                if (doc.exists) {
-                    document.getElementById('welcomeMsg').innerText = "Hello, " + doc.data().name;
-                    loadRecentRecords();
-                }
-            });
+            loadRecords();
         }
     });
 
-    // Sorting by lastUpdated so newly synced files appear first
-    function loadRecentRecords() {
-        db.collection("daily_reports").orderBy("lastUpdated", "desc").limit(20).get().then(snapshot => {
+    function loadRecords(filterDate = null) {
+        let query = db.collection("daily_reports").orderBy("lastUpdated", "desc");
+        
+        if (filterDate) {
+            query = db.collection("daily_reports").where("reportDate", "==", filterDate);
+        } else {
+            query = query.limit(30);
+        }
+
+        query.get().then(snapshot => {
             const tbody = document.getElementById('recordsTableBody');
+            let sumBilled = 0;
+            let sumReceived = 0;
             tbody.innerHTML = "";
+            
             snapshot.forEach(doc => {
                 const d = doc.data();
+                sumBilled += d.amountBilled;
+                sumReceived += d.amountReceived;
                 tbody.innerHTML += `<tr><td>${d.reportDate}</td><td>${d.doctorName}</td><td>${d.location}</td><td>${formatCurrency(d.amountBilled)}</td><td>${formatCurrency(d.amountReceived)}</td></tr>`;
             });
-        }).catch(err => console.error("Error loading table:", err));
+
+            document.getElementById('totalBilled').innerText = formatCurrency(sumBilled);
+            document.getElementById('totalReceived').innerText = formatCurrency(sumReceived);
+        });
     }
+
+    document.getElementById('applyFilterBtn').onclick = () => {
+        const dateVal = document.getElementById('filterDate').value.trim();
+        if(dateVal) loadRecords(dateVal);
+    };
+
+    document.getElementById('clearFilterBtn').onclick = () => {
+        document.getElementById('filterDate').value = "";
+        loadRecords();
+    };
 
     document.getElementById('uploadBtn').onclick = function() {
         const fileInput = document.getElementById('excelFile');
         const status = document.getElementById('status');
-        if (!fileInput.files[0]) { alert("Select a file first."); return; }
+        if (!fileInput.files[0]) return;
 
-        status.style.color = "#555";
-        status.innerText = "Syncing with Source of Truth...";
-        
+        status.innerText = "Processing...";
         const reader = new FileReader();
         reader.onload = async function(e) {
             try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array'});
+                const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
                 const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-                
                 let reportDate = "";
                 let headerRowIndex = -1;
 
@@ -141,46 +180,26 @@
                     if((rows[i] || []).includes("Doctor")) headerRowIndex = i;
                 }
 
-                if(!reportDate || headerRowIndex === -1) throw new Error("Invalid file structure or date range.");
-
                 const jsonData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex });
                 let count = 0;
-
                 for (const row of jsonData) {
                     const keys = Object.keys(row);
-                    const docKey = keys.find(k => k.trim() === 'Doctor');
-                    const locKey = keys.find(k => k.trim() === 'Location');
-                    const billKey = keys.find(k => k.trim() === 'Amount Billed');
-                    const recKey = keys.find(k => k.trim() === 'Amount Received');
-
-                    const docName = row[docKey] ? row[docKey].toString().trim() : "";
-                    
+                    const docName = (row[keys.find(k => k.trim()==='Doctor')] || "").toString().trim();
                     if (docName && !docName.includes("Total:")) {
-                        const location = row[locKey] || "N/A";
-                        // Unique ID to overwrite existing data for the same Doctor/Date/Location
-                        const uniqueId = `${reportDate}_${docName}_${location}`.replace(/\//g, '-').replace(/\s+/g, '_');
-                        
-                        await db.collection("daily_reports").doc(uniqueId).set({
-                            reportDate: reportDate,
-                            doctorName: docName,
-                            location: location,
-                            amountBilled: parseFloat(row[billKey]) || 0,
-                            amountReceived: parseFloat(row[recKey]) || 0,
+                        const loc = row[keys.find(k => k.trim()==='Location')] || "N/A";
+                        const id = `${reportDate}_${docName}_${loc}`.replace(/\//g, '-').replace(/\s+/g, '_');
+                        await db.collection("daily_reports").doc(id).set({
+                            reportDate, doctorName: docName, location: loc,
+                            amountBilled: parseFloat(row[keys.find(k => k.trim()==='Amount Billed')]) || 0,
+                            amountReceived: parseFloat(row[keys.find(k => k.trim()==='Amount Received')]) || 0,
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });
                         count++;
                     }
                 }
-
-                status.style.color = "green";
-                status.innerText = `✔ Sync Complete: ${count} records processed.`;
-                fileInput.value = "";
-                // Small delay to allow Firebase to process the timestamp before refreshing table
-                setTimeout(loadRecentRecords, 1000);
-            } catch (err) {
-                status.style.color = "red";
-                status.innerText = "Error: " + err.message;
-            }
+                status.innerHTML = `<span style="color:green">✔ Success: ${count} synced.</span>`;
+                setTimeout(loadRecords, 1000);
+            } catch (err) { status.innerHTML = `<span style="color:red">Error: ${err.message}</span>`; }
         };
         reader.readAsArrayBuffer(fileInput.files[0]);
     };
