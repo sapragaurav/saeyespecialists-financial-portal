@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.6</title>
+    <title>SA Eye Specialists Portal - V1.7</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -18,14 +18,10 @@
         .hidden { display: none; }
         .admin-badge { background: #e6ffed; color: #28a745; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 20px; }
         .upload-box { border: 2px dashed #007bff; padding: 20px; border-radius: 10px; margin: 20px 0; background: #f8fbff; }
-        
-        /* Table Styles */
         .table-container { margin-top: 30px; overflow-x: auto; text-align: left; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th { background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; padding: 12px; text-align: left; }
         td { border-bottom: 1px solid #eee; padding: 12px; }
-        tr:hover { background-color: #fcfcfc; }
-        
         #status { margin-top: 15px; font-size: 14px; color: #555; font-weight: bold; }
         .version-display { position: absolute; top: 10px; right: 15px; font-size: 10px; color: #bbb; }
     </style>
@@ -48,31 +44,24 @@
         <div class="upload-box">
             <h4 style="margin-top:0;">Daily Report Uploader</h4>
             <input type="file" id="excelFile" accept=".xlsx, .xls">
-            <button class="btn" id="uploadBtn" style="background-color: #28a745;">Process & Save to Firebase</button>
+            <button class="btn" id="uploadBtn" style="background-color: #28a745;">Process & Sync Data</button>
             <p id="status"></p>
         </div>
 
         <div class="table-container">
-            <h3>Recent Records</h3>
+            <h3>Recent Data Syncs</h3>
             <table>
                 <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Doctor</th>
-                        <th>Location</th>
-                        <th>Billed</th>
-                        <th>Received</th>
-                    </tr>
+                    <tr><th>Date</th><th>Doctor</th><th>Location</th><th>Billed</th><th>Received</th></tr>
                 </thead>
-                <tbody id="recordsTableBody">
-                    </tbody>
+                <tbody id="recordsTableBody"></tbody>
             </table>
         </div>
         
         <hr style="margin: 40px 0 20px 0; border: 0; border-top: 1px solid #eee;">
         <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
     </div>
-    <div class="version-display">Build Version: 1.6</div>
+    <div class="version-display">Build Version: 1.7</div>
 </div>
 
 <script>
@@ -91,7 +80,6 @@
 
     const formatCurrency = (num) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(num);
 
-    // --- Auth Logic ---
     document.getElementById('loginBtn').onclick = () => {
         const e = document.getElementById('email').value;
         const p = document.getElementById('password').value;
@@ -113,36 +101,27 @@
         }
     });
 
-    // --- Load Data into Table ---
     function loadRecentRecords() {
-        db.collection("daily_reports").orderBy("uploadedAt", "desc").limit(15).get().then(snapshot => {
+        db.collection("daily_reports").orderBy("reportDate", "desc").limit(20).get().then(snapshot => {
             const tbody = document.getElementById('recordsTableBody');
             tbody.innerHTML = "";
             snapshot.forEach(doc => {
-                const data = doc.data();
-                const row = `<tr>
-                    <td>${data.reportDate}</td>
-                    <td>${data.doctorName}</td>
-                    <td>${data.location}</td>
-                    <td>${formatCurrency(data.amountBilled)}</td>
-                    <td>${formatCurrency(data.amountReceived)}</td>
-                </tr>`;
-                tbody.innerHTML += row;
+                const d = doc.data();
+                tbody.innerHTML += `<tr><td>${d.reportDate}</td><td>${d.doctorName}</td><td>${d.location}</td><td>${formatCurrency(d.amountBilled)}</td><td>${formatCurrency(d.amountReceived)}</td></tr>`;
             });
         });
     }
 
-    // --- Excel Upload Logic ---
     document.getElementById('uploadBtn').onclick = function() {
         const fileInput = document.getElementById('excelFile');
         const status = document.getElementById('status');
         if (!fileInput.files[0]) { alert("Select a file first."); return; }
 
         status.style.color = "#555";
-        status.innerText = "Processing...";
+        status.innerText = "Syncing with Source of Truth...";
         
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = async function(e) {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
@@ -152,49 +131,51 @@
                 let reportDate = "";
                 let headerRowIndex = -1;
 
-                for(let i=0; i < Math.min(rows.length, 20); i++) {
-                    const currentRow = rows[i];
-                    if(!currentRow) continue;
-                    const rowText = currentRow.join(" ");
+                for(let i=0; i < 20; i++) {
+                    const rowText = (rows[i] || []).join(" ");
                     if(rowText.includes("Period")) {
-                        const dateRegex = /\d{1,2}\/\d{1,2}\/\d{4}/g;
-                        const foundDates = rowText.match(dateRegex);
-                        if(foundDates && foundDates.length >= 2 && foundDates[0] === foundDates[1]) {
-                            reportDate = foundDates[0];
-                        }
+                        const dates = rowText.match(/\d{1,2}\/\d{1,2}\/\d{4}/g);
+                        if(dates && dates[0] === dates[1]) reportDate = dates[0];
                     }
-                    if(currentRow.includes("Doctor")) headerRowIndex = i;
+                    if((rows[i] || []).includes("Doctor")) headerRowIndex = i;
                 }
 
-                if(!reportDate) throw new Error("Check your Excel 'Period' row (must be a single day).");
-                if(headerRowIndex === -1) throw new Error("Header row not found.");
+                if(!reportDate || headerRowIndex === -1) throw new Error("Invalid file structure or date range.");
 
                 const jsonData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex });
-                const batch = db.batch();
                 let count = 0;
 
-                jsonData.forEach(row => {
-                    const docName = row['Doctor'] ? row['Doctor'].toString().trim() : "";
+                for (const row of jsonData) {
+                    // Fuzzy matching for column names to prevent "One Record" issue
+                    const keys = Object.keys(row);
+                    const docKey = keys.find(k => k.trim() === 'Doctor');
+                    const locKey = keys.find(k => k.trim() === 'Location');
+                    const billKey = keys.find(k => k.trim() === 'Amount Billed');
+                    const recKey = keys.find(k => k.trim() === 'Amount Received');
+
+                    const docName = row[docKey] ? row[docKey].toString().trim() : "";
+                    
                     if (docName && !docName.includes("Total:")) {
-                        const ref = db.collection("daily_reports").doc();
-                        batch.set(ref, {
+                        const location = row[locKey] || "N/A";
+                        // Unique ID based on Date, Doctor, and Location to prevent duplicates
+                        const uniqueId = `${reportDate}_${docName}_${location}`.replace(/\s+/g, '_');
+                        
+                        await db.collection("daily_reports").doc(uniqueId).set({
                             reportDate: reportDate,
                             doctorName: docName,
-                            location: row['Location'] || "N/A",
-                            amountBilled: parseFloat(row['Amount Billed']) || 0,
-                            amountReceived: parseFloat(row['Amount Received']) || 0,
-                            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
+                            location: location,
+                            amountBilled: parseFloat(row[billKey]) || 0,
+                            amountReceived: parseFloat(row[recKey]) || 0,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
                         count++;
                     }
-                });
+                }
 
-                batch.commit().then(() => {
-                    status.style.color = "green";
-                    status.innerText = `✔ Success: ${count} records saved.`;
-                    fileInput.value = "";
-                    loadRecentRecords(); // Refresh the table automatically
-                });
+                status.style.color = "green";
+                status.innerText = `✔ Sync Complete: ${count} doctor records processed.`;
+                fileInput.value = "";
+                loadRecentRecords();
             } catch (err) {
                 status.style.color = "red";
                 status.innerText = "Error: " + err.message;
