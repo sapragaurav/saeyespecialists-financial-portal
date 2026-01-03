@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V1.4</title>
+    <title>SA Eye Specialists Portal - V1.5</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -11,7 +11,7 @@
     
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; position: relative; }
         input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
         .btn { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
         .btn:hover { background-color: #004494; }
@@ -19,7 +19,7 @@
         .admin-badge { background: #e6ffed; color: #28a745; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 20px; }
         .upload-box { border: 2px dashed #007bff; padding: 20px; border-radius: 10px; margin-top: 20px; background: #f8fbff; }
         #status { margin-top: 15px; font-size: 14px; color: #555; font-weight: bold; white-space: pre-wrap; }
-        .version-tag { font-size: 10px; color: #ccc; margin-top: 20px; display: block; }
+        .version-display { position: absolute; bottom: 10px; right: 15px; font-size: 10px; color: #bbb; }
     </style>
 </head>
 <body>
@@ -47,8 +47,8 @@
         <p id="status"></p>
         <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
         <button id="logoutBtn" style="background:none; border:none; color:#888; cursor:pointer; text-decoration: underline;">Sign Out</button>
-        <span class="version-tag">Build Version 1.4</span>
     </div>
+    <div class="version-display">Build Version: 1.5</div>
 </div>
 
 <script>
@@ -102,31 +102,35 @@
                 let reportDate = "";
                 let headerRowIndex = -1;
 
-                for(let i=0; i < Math.min(rows.length, 10); i++) {
-                    const row = rows[i];
-                    if(!row || row.length === 0) continue;
+                // Scan rows to find Period and Doctor headers
+                for(let i=0; i < Math.min(rows.length, 20); i++) {
+                    const currentRow = rows[i];
+                    if(!currentRow || currentRow.length === 0) continue;
                     
-                    const firstCellText = row[0] ? row[0].toString().trim() : "";
+                    // Join row text to see if "Period" exists anywhere in the line
+                    const rowText = currentRow.join(" ");
                     
-                    if(firstCellText.startsWith("Period")) {
-                        // Extract dates. Format: "Period27/03/2024 - 27/03/2024"
-                        const cleanText = firstCellText.replace("Period", "").trim();
-                        const parts = cleanText.split("-").map(p => p.trim());
+                    if(rowText.includes("Period")) {
+                        // Extract anything that looks like a date (DD/MM/YYYY)
+                        const dateRegex = /\d{1,2}\/\d{1,2}\/\d{4}/g;
+                        const foundDates = rowText.match(dateRegex);
                         
-                        if(parts.length >= 2 && parts[0] === parts[1]) {
-                            reportDate = parts[0];
-                        } else {
-                            throw new Error(`Date check failed: Start (${parts[0]}) must match End (${parts[1]})`);
+                        if(foundDates && foundDates.length >= 2) {
+                            if(foundDates[0] === foundDates[1]) {
+                                reportDate = foundDates[0];
+                            } else {
+                                throw new Error(`Mismatch: Start (${foundDates[0]}) vs End (${foundDates[1]}). Please upload a single-day report.`);
+                            }
                         }
                     }
                     
-                    if(row.includes("Doctor")) {
+                    if(currentRow.includes("Doctor")) {
                         headerRowIndex = i;
                     }
                 }
 
-                if(!reportDate) throw new Error("Could not find a valid single-day 'Period' (e.g., 27/03/2024 - 27/03/2024) in the report headers.");
-                if(headerRowIndex === -1) throw new Error("Could not find the 'Doctor' header row.");
+                if(!reportDate) throw new Error("Could not find a valid date range in the file. Ensure 'Period' and dates are present.");
+                if(headerRowIndex === -1) throw new Error("Could not find the 'Doctor' data header.");
 
                 const jsonData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex });
                 const batch = db.batch();
@@ -148,7 +152,7 @@
                     }
                 });
 
-                if(count === 0) throw new Error("No doctor records found to upload.");
+                if(count === 0) throw new Error("No doctor records found.");
 
                 batch.commit().then(() => {
                     status.style.color = "green";
