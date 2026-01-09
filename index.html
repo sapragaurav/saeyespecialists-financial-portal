@@ -297,7 +297,7 @@
         } catch (e) { document.getElementById('dbStatus').innerText = "Error: " + e.message; }
     }
 
-    // --- REPLACEMENT CODE FOR PDF GENERATION (Phase 3) ---
+// --- REPLACEMENT CODE FOR PDF GENERATION (Phase 3) ---
     window.generatePDF = function() {
         const docName = document.getElementById('doctorFilter').value;
         const monthFilter = document.getElementById('monthFilter').value;
@@ -413,7 +413,7 @@
         const fileName = `Remittance_${docName}_${reportPeriod}.pdf`.replace(/[^a-z0-9]/gi, '_');
         doc.save(fileName);
     };
-
+    
     // --- DROPDOWNS ---
     function initFYDropdowns() {
         const fySet = new Set(); allRecords.forEach(r => fySet.add(getFinancialYear(r.jsDate)));
