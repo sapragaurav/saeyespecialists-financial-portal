@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V3.2</title>
+    <title>SA Eye Specialists Portal - V3.3</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.2</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.3</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -171,8 +171,8 @@
                             <th>Date</th>
                             <th>Doctor</th>
                             <th>Location</th>
-                            <th class="money-col">Billings</th> <th style="text-align:center;">Commission Rate</th> <th class="money-col">Practice Revenue</th> <th class="money-col">GST</th>
-                            <th class="money-col">Remittance</th>
+                            <th>Billings</th> <th style="text-align:center;">Commission Rate</th> <th>Practice Revenue</th> <th>GST</th>
+                            <th>Remittance</th>
                             <th style="text-align:center;">Action</th>
                         </tr>
                     </thead>
@@ -227,7 +227,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 3.2</span>
+            <span>Build Version: 3.3</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -465,15 +465,31 @@
     function renderDashboard(data) {
         const tbody = document.getElementById('recordsTableBody'); tbody.innerHTML = "";
         let tRec=0, tFee=0, tGST=0, tRem=0;
+        
         data.sort((a,b) => b.jsDate - a.jsDate).forEach(d => {
+            // --- FIX START: Capture the new variable name ---
+            const valReceived = d.AmountReceived || 0; 
+            // ------------------------------------------------
+
             const {rate, isEx} = getRate(d.doctorName, d.jsDate);
-            const fee = d.amountReceived * (rate / 100); const gst = fee * 0.10; const remit = d.amountReceived - (fee + gst);
-            tRec += d.amountReceived; tFee += fee; tGST += gst; tRem += remit;
+            
+            // Use valReceived for calculations instead of d.amountReceived
+            const fee = valReceived * (rate / 100); 
+            const gst = fee * 0.10; 
+            const remit = valReceived - (fee + gst);
+            
+            tRec += valReceived; tFee += fee; tGST += gst; tRem += remit;
+            
             const badge = isEx ? `<span style="background:#fff3cd; color:#856404; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}% (Ex)</span>` : `<span style="background:#e7f1ff; color:#0056b3; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}%</span>`;
-            tbody.innerHTML += `<tr><td>${d.reportDate}</td><td style="font-weight:600;">${d.doctorName}</td><td>${d.location}</td><td class="money-col">${formatCurr(d.amountReceived)}</td><td style="text-align:center;">${badge}</td><td class="money-col">${formatCurr(fee)}</td><td class="money-col">${formatCurr(gst)}</td><td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td><td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Del</button></td></tr>`;
+            
+            // Use valReceived in the HTML string below
+            tbody.innerHTML += `<tr><td>${d.reportDate}</td><td style="font-weight:600;">${d.doctorName}</td><td>${d.location}</td><td class="money-col">${formatCurr(valReceived)}</td><td style="text-align:center;">${badge}</td><td class="money-col">${formatCurr(fee)}</td><td class="money-col">${formatCurr(gst)}</td><td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td><td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Del</button></td></tr>`;
         });
-        document.getElementById('totalReceived').innerText = formatCurr(tRec); document.getElementById('totalFee').innerText = formatCurr(tFee);
-        document.getElementById('totalGST').innerText = formatCurr(tGST); document.getElementById('totalRemit').innerText = formatCurr(tRem);
+        
+        document.getElementById('totalReceived').innerText = formatCurr(tRec); 
+        document.getElementById('totalFee').innerText = formatCurr(tFee);
+        document.getElementById('totalGST').innerText = formatCurr(tGST); 
+        document.getElementById('totalRemit').innerText = formatCurr(tRem);
     }
     
     // --- SHARED UTILS ---
