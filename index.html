@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V3.4</title>
+    <title>SA Eye Specialists Portal - V3.5</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.4</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.5</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -171,8 +171,8 @@
                             <th>Date</th>
                             <th>Doctor</th>
                             <th>Location</th>
-                            <th>Billings</th> <th style="text-align:center;">Commission Rate</th> <th>Practice Revenue</th> <th>GST</th>
-                            <th>Remittance</th>
+                            <th class="money-col">Billings</th> <th style="text-align:center;">Commission Rate</th> <th class="money-col">Practice Revenue</th> <th class="money-col">GST</th>
+                            <th class="money-col">Remittance</th>
                             <th style="text-align:center;">Action</th>
                         </tr>
                     </thead>
@@ -196,15 +196,17 @@
                     <div id="doctorListPanel"></div>
                 </div>
                 <div class="config-panel" id="configPanel" style="display:none;">
-                    <h2 id="configTitle" style="margin-top:0; color:#0056b3; border-bottom:2px solid #eee; padding-bottom:15px;">
-                        <div style="background:#f1f3f5; padding:15px; border-radius:8px; margin-bottom:15px;">
-                            <strong>🏦 Bank Details</strong>
-                            <div style="display:flex; gap:10px; margin-top:10px;">
-                                <input type="text" id="docBSB" placeholder="BSB (e.g. 123-456)" class="login-input" style="margin:0;">
-                                <input type="text" id="docAcc" placeholder="Account Number" class="login-input" style="margin:0;">
-                            </div>
+                    
+                    <h2 id="configTitle" style="margin-top:0; color:#0056b3; border-bottom:2px solid #eee; padding-bottom:15px;"></h2>
+                    
+                    <div style="background:#f1f3f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+                        <strong>🏦 Bank Details</strong>
+                        <div style="display:flex; gap:10px; margin-top:10px;">
+                            <input type="text" id="docBSB" placeholder="BSB (e.g. 123-456)" class="login-input" style="margin:0;">
+                            <input type="text" id="docAcc" placeholder="Account Number" class="login-input" style="margin:0;">
                         </div>
-                    </h2>
+                    </div>
+
                     <div class="rule-card">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                             <strong>📅 Fee Timeline</strong>
@@ -227,7 +229,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 3.4</span>
+            <span>Build Version: 3.5</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -250,6 +252,7 @@
     let allRecords = [];
     let doctorSettingsMap = {};
     let charts = {};
+    let currentEditingDoc = ""; // Added Global Variable for Safety
     const DOCTOR_COLORS = ['#0056b3', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14', '#20c997', '#e83e8c', '#6f42c1'];
 
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
@@ -275,7 +278,7 @@
         }
     });
 
-    // --- MAIN DATA LOADER (FIXED) ---
+    // --- MAIN DATA LOADER ---
     async function loadAllData() {
         document.getElementById('dbStatus').innerText = "Status: Loading...";
         try {
@@ -287,12 +290,10 @@
 
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records`;
             
-            // --- THE FIX: Initialize All Components ---
             initFYDropdowns();
             populateMonthDropdown();
-            renderDashboard(allRecords); // Show Table
-            renderDoctorList(); // Show Settings List
-            // -----------------------------------------
+            renderVisuals();
+            renderDoctorList();
         } catch (e) { document.getElementById('dbStatus').innerText = "Error: " + e.message; }
     }
 
@@ -353,7 +354,6 @@
         const selData = document.getElementById('dataFyFilter'); selData.innerHTML = '<option value="">-- All FYs --</option>';
         sortedFY.forEach(fy => selData.innerHTML += `<option value="${fy}">${fy}</option>`);
         selDash.onchange = renderVisuals; selData.onchange = populateMonthDropdown;
-        renderVisuals();
     }
     
     function populateMonthDropdown() {
@@ -367,46 +367,39 @@
         months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
     }
 
-    // --- REPLACEMENT CODE FOR VISUALS & CHARTS ---
+    // --- VISUALS & CHARTS ---
     function renderVisuals() {
         const selectedFY = document.getElementById('fyDropdown').value;
         if(!allRecords.length || selectedFY === "No Data") return;
         
         const fyRecords = allRecords.filter(r => getFinancialYear(r.jsDate) === selectedFY);
 
-        // 1. Calculate Totals for Cards
+        // 1. Calculate Totals
         let totalBillings = 0;
         let totalPracticeRev = 0;
 
-        // 2. Prepare Data Buckets for Charts
         const revByDoc = {}; 
-        const docTrends = {}; // Bucket for the Trend Line Chart
+        const docTrends = {}; 
 
         fyRecords.forEach(r => {
-            // FIX: Use Capital 'A' for new data structure
             const valReceived = r.AmountReceived || 0; 
 
-            // Totals
             totalBillings += valReceived;
             const {rate} = getRate(r.doctorName, r.jsDate);
             totalPracticeRev += valReceived * (rate / 100);
 
-            // Populate Bar Chart Data
             revByDoc[r.doctorName] = (revByDoc[r.doctorName] || 0) + valReceived;
 
-            // Populate Trend Chart Data
             if(!docTrends[r.doctorName]) docTrends[r.doctorName] = Array(12).fill(0);
             const mIndex = r.jsDate.getMonth(); 
-            let fyIndex = (mIndex + 6) % 12; // Shift so July is index 0
+            let fyIndex = (mIndex + 6) % 12; 
             docTrends[r.doctorName][fyIndex] += valReceived;
         });
 
-        // 3. Update Text Cards
         document.getElementById('dashTotalRev').innerText = formatCurr(totalBillings);
         document.getElementById('dashPracRev').innerText = formatCurr(totalPracticeRev);
         document.getElementById('dashDocCount').innerText = [...new Set(fyRecords.map(r => r.doctorName))].length;
         
-        // 4. Draw Revenue Bar Chart
         const docNames = Object.keys(revByDoc);
         const barDatasets = docNames.map((name, i) => ({ 
             label: name, 
@@ -415,7 +408,6 @@
         }));
         createChart('doctorChart', 'bar', ['Billings'], barDatasets, 'bar');
 
-        // 5. Draw Trend Line Chart
         const monthKeys = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
         const trendDatasets = Object.keys(docTrends).map((docName, i) => {
             const docIndex = docNames.indexOf(docName);
@@ -494,13 +486,9 @@
         let tRec=0, tFee=0, tGST=0, tRem=0;
         
         data.sort((a,b) => b.jsDate - a.jsDate).forEach(d => {
-            // --- FIX START: Capture the new variable name ---
             const valReceived = d.AmountReceived || 0; 
-            // ------------------------------------------------
-
             const {rate, isEx} = getRate(d.doctorName, d.jsDate);
             
-            // Use valReceived for calculations instead of d.amountReceived
             const fee = valReceived * (rate / 100); 
             const gst = fee * 0.10; 
             const remit = valReceived - (fee + gst);
@@ -509,7 +497,6 @@
             
             const badge = isEx ? `<span style="background:#fff3cd; color:#856404; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}% (Ex)</span>` : `<span style="background:#e7f1ff; color:#0056b3; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}%</span>`;
             
-            // Use valReceived in the HTML string below
             tbody.innerHTML += `<tr><td>${d.reportDate}</td><td style="font-weight:600;">${d.doctorName}</td><td>${d.location}</td><td class="money-col">${formatCurr(valReceived)}</td><td style="text-align:center;">${badge}</td><td class="money-col">${formatCurr(fee)}</td><td class="money-col">${formatCurr(gst)}</td><td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td><td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Del</button></td></tr>`;
         });
         
@@ -546,14 +533,13 @@
         });
     }
     
-    // --- REPLACEMENT CODE FOR DOCTOR SETTINGS ---
+    // --- DOCTOR SETTINGS ---
     function openConfig(name) {
         currentEditingDoc = name;
         document.getElementById('noDocSelected').style.display = 'none';
         document.getElementById('configPanel').style.display = 'block';
         document.getElementById('configTitle').innerText = name;
         
-        // Load settings or default to empty
         const set = doctorSettingsMap[name] || { timeline: [], exceptions: {}, bsb: "", acc: "" };
         
         // 1. LOAD BANK DETAILS
@@ -579,25 +565,21 @@
         document.getElementById('exceptionsContainer').appendChild(div);
     };
     window.saveDoctorSettings = async () => {
-        // 1. CAPTURE TIMELINE INPUTS
         const tl = [];
         document.querySelectorAll('.tl-d').forEach((el, i) => {
             const f = document.querySelectorAll('.tl-f')[i].value;
             if(el.value && f) tl.push({ startDate: el.value, fee: f });
         });
 
-        // 2. CAPTURE EXCEPTION INPUTS
         const ex = {};
         document.querySelectorAll('.ex-m').forEach((el, i) => {
             const f = document.querySelectorAll('.ex-f')[i].value;
             if(el.value && f) ex[el.value] = f;
         });
 
-        // 3. CAPTURE BANK DETAILS (NEW)
         const bsb = document.getElementById('docBSB').value;
         const acc = document.getElementById('docAcc').value;
 
-        // 4. SAVE TO FIREBASE
         try {
             await db.collection("doctor_settings").doc(currentEditingDoc).set({ 
                 timeline: tl, 
@@ -608,15 +590,13 @@
             document.getElementById('saveStatus').innerText = "Saved!";
             document.getElementById('saveStatus').style.color = "green";
             
-            // Reload data to ensure the system knows about the changes immediately
             loadAllData();
         } catch (e) {
             document.getElementById('saveStatus').innerText = "Error: " + e.message;
             document.getElementById('saveStatus').style.color = "red";
         }
     };
-     // --- UPDATED EXCEL UPLOAD LOGIC ---
-    // The exact list of columns you provided
+     // --- EXCEL UPLOAD ---
     const EXCEL_COLS = [
         "Amount Billed", "Cash Received", "EFTPOS Received", "Credit Card Received", 
         "Extras Cover Received", "Bank Transfer Received", "Cheque Received", 
@@ -635,7 +615,6 @@
                 const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
                 const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
                 
-                // Find header row index
                 let date = "", hIdx = -1;
                 for(let i=0; i<Math.min(rows.length, 25); i++){
                     const txt = (rows[i]||[]).join(" ");
@@ -643,13 +622,11 @@
                     if((rows[i]||[]).includes("Doctor")) hIdx=i;
                 }
 
-                // Use the detected header row to parse data
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx });
                 const batch = db.batch();
                 let count = 0;
 
                 for(const r of json){
-                    // Look for keys ignoring whitespace/case
                     const keys = Object.keys(r);
                     const findKey = (name) => keys.find(k => k.trim().toLowerCase() === name.toLowerCase());
                     
@@ -657,10 +634,8 @@
                     
                     if(doc && !doc.includes("Total:")){
                         const loc = r[findKey('Location')]||"N/A";
-                        // Create unique ID
                         const id = `${date}_${doc}_${loc}`.replace(/\//g,'-').replace(/\s+/g,'_');
                         
-                        // Build the data object with ALL columns (default to 0 if missing)
                         let dataObj = {
                             reportDate: date,
                             doctorName: doc,
@@ -668,11 +643,9 @@
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                         };
 
-                        // Loop through your list of columns and capture them
                         EXCEL_COLS.forEach(colName => {
                             const val = r[findKey(colName)];
                             dataObj[colName.replace(/\s+/g, '')] = parseFloat(val) || 0; 
-                            // e.g. "Cash Received" becomes database field "CashReceived"
                         });
 
                         batch.set(db.collection("daily_reports").doc(id), dataObj, {merge:true});
