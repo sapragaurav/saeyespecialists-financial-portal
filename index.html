@@ -297,19 +297,48 @@
         } catch (e) { document.getElementById('dbStatus').innerText = "Error: " + e.message; }
     }
 
-    // --- PDF GENERATION ---
+    // --- REPLACEMENT CODE FOR PDF GENERATION (Phase 3) ---
     window.generatePDF = function() {
         const docName = document.getElementById('doctorFilter').value;
         const monthFilter = document.getElementById('monthFilter').value;
         const fyFilter = document.getElementById('dataFyFilter').value;
+        
         if(!docName) { alert("Please filter by a specific Doctor first."); return; }
         
+        // 1. GET FILTERED DATA (To calculate hidden summaries)
+        const pdfData = allRecords.filter(r => {
+            const matchFY = !fyFilter || getFinancialYear(r.jsDate) === fyFilter;
+            const matchM = !monthFilter || r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }) === monthFilter;
+            const matchDoc = r.doctorName === docName;
+            return matchFY && matchM && matchDoc;
+        });
+
+        // 2. DEFINE BREAKDOWN COLUMNS (The hidden data)
+        const summaryKeys = [
+            "CashReceived", "EFTPOSReceived", "CreditCardReceived", 
+            "ExtrasCoverReceived", "BankTransferReceived", "ChequeReceived", 
+            "DepositApplied", "BulkBillReceived", "DVAReceived", 
+            "ECLIPSEReceived", "90DayGapReceived"
+        ];
+        
+        // 3. CALCULATE TOTALS FOR SUMMARY
+        let breakdown = {};
+        summaryKeys.forEach(k => breakdown[k] = 0);
+        
+        pdfData.forEach(r => {
+            summaryKeys.forEach(k => {
+                breakdown[k] += (r[k] || 0);
+            });
+        });
+
+        // --- START PDF DRAWING ---
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
         const logoImg = document.getElementById('pdfLogoSource');
         if (logoImg.complete) doc.addImage(logoImg, 'PNG', 15, 10, 40, 15);
         
+        // Header Info
         doc.setFontSize(16); doc.text("Remittance Advice / Tax Invoice", 195, 20, { align: "right" });
         doc.setFontSize(10); doc.setTextColor(100);
         const reportPeriod = monthFilter ? monthFilter : (fyFilter || "All Time");
@@ -318,6 +347,7 @@
 
         doc.setFontSize(12); doc.setTextColor(0); doc.text(`To: ${docName}`, 15, 40);
         
+        // Main Totals (Top Box)
         const tRev = document.getElementById('totalReceived').innerText;
         const tFee = document.getElementById('totalFee').innerText;
         const tGST = document.getElementById('totalGST').innerText;
@@ -325,21 +355,61 @@
 
         doc.setFillColor(240, 240, 240); doc.rect(15, 45, 180, 25, 'F');
         doc.setFontSize(10);
-        doc.text("Total Received:", 20, 55);  doc.text(tRev, 60, 55, { align: "right" });
-        doc.text("Service Fee:", 20, 62);    doc.text(tFee, 60, 62, { align: "right" });
-        doc.text("GST (10%):", 100, 55);     doc.text(tGST, 140, 55, { align: "right" });
+        doc.text("Total Billings:", 20, 55);      doc.text(tRev, 60, 55, { align: "right" });
+        doc.text("Practice Revenue:", 20, 62);    doc.text(tFee, 60, 62, { align: "right" });
+        doc.text("GST (10%):", 100, 55);          doc.text(tGST, 140, 55, { align: "right" });
         doc.setFontSize(12); doc.setFont(undefined, 'bold');
-        doc.text("Total Remittance:", 100, 62); doc.text(tRem, 160, 62, { align: "right" });
+        doc.text("Total Remittance:", 100, 62);   doc.text(tRem, 160, 62, { align: "right" });
 
+        // Main Table
         doc.autoTable({
             html: '#dataTableElement', startY: 80, theme: 'striped', headStyles: { fillColor: [0, 86, 179] },
-            columns: [ { header: 'Date', dataKey: 0 }, { header: 'Location', dataKey: 2 }, { header: 'Received', dataKey: 3 }, { header: 'Fee', dataKey: 5 }, { header: 'GST', dataKey: 6 }, { header: 'Remit', dataKey: 7 } ],
-            didParseCell: function(data) { if (data.column.index === 1 || data.column.index === 4 || data.column.index === 8) data.cell.styles.display = 'none'; }
+            columns: [ 
+                { header: 'Date', dataKey: 0 }, 
+                { header: 'Location', dataKey: 2 }, 
+                { header: 'Billings', dataKey: 3 }, 
+                { header: 'Prac Rev', dataKey: 5 }, 
+                { header: 'GST', dataKey: 6 }, 
+                { header: 'Remit', dataKey: 7 } 
+            ],
+            didParseCell: function(data) { 
+                if (data.column.index === 1 || data.column.index === 4 || data.column.index === 8) data.cell.styles.display = 'none'; 
+            }
         });
 
+        // --- NEW SUMMARY SECTION ---
+        let finalY = doc.lastAutoTable.finalY + 10; // Start below the main table
+        
+        // Check if we need a new page
+        if (finalY > 250) { doc.addPage(); finalY = 20; }
+
+        doc.setFontSize(11); doc.setTextColor(0); doc.setFont(undefined, 'bold');
+        doc.text("Payment Breakdown Summary", 15, finalY);
+        doc.setLineWidth(0.5); doc.line(15, finalY + 2, 70, finalY + 2); // Underline
+
+        const summaryData = summaryKeys.map(key => {
+            // Convert "CashReceived" to "Cash Received" for display
+            const label = key.replace(/([A-Z])/g, ' $1').trim(); 
+            return [label, formatCurr(breakdown[key])];
+        });
+
+        doc.autoTable({
+            startY: finalY + 5,
+            head: [['Payment Type', 'Amount']],
+            body: summaryData,
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 2 },
+            headStyles: { fillColor: [100, 100, 100] },
+            columnStyles: { 1: { halign: 'right', font: 'courier' } },
+            margin: { left: 15 },
+            tableWidth: 80 // Keep it compact
+        });
+
+        // Footer
         const pageHeight = doc.internal.pageSize.height;
-        doc.setFontSize(8); doc.setTextColor(150);
+        doc.setFontSize(8); doc.setTextColor(150); doc.setFont(undefined, 'normal');
         doc.text("SA Eye Specialists - Financial Portal", 105, pageHeight - 10, { align: "center" });
+        
         const fileName = `Remittance_${docName}_${reportPeriod}.pdf`.replace(/[^a-z0-9]/gi, '_');
         doc.save(fileName);
     };
