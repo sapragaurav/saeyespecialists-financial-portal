@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V3.3</title>
+    <title>SA Eye Specialists Portal - V3.4</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.3</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.4</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -227,7 +227,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 3.3</span>
+            <span>Build Version: 3.4</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -367,41 +367,68 @@
         months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
     }
 
-    // --- UPDATED VISUALS (Calculates Practice Revenue) ---
+    // --- REPLACEMENT CODE FOR VISUALS & CHARTS ---
     function renderVisuals() {
         const selectedFY = document.getElementById('fyDropdown').value;
         if(!allRecords.length || selectedFY === "No Data") return;
+        
         const fyRecords = allRecords.filter(r => getFinancialYear(r.jsDate) === selectedFY);
 
-        // 1. Calculate Totals
+        // 1. Calculate Totals for Cards
         let totalBillings = 0;
         let totalPracticeRev = 0;
 
+        // 2. Prepare Data Buckets for Charts
+        const revByDoc = {}; 
+        const docTrends = {}; // Bucket for the Trend Line Chart
+
         fyRecords.forEach(r => {
-            // "AmountReceived" is the key we saved in database for Billings
-            totalBillings += (r.AmountReceived || 0); 
-            
-            // Calculate Practice Revenue dynamically
+            // FIX: Use Capital 'A' for new data structure
+            const valReceived = r.AmountReceived || 0; 
+
+            // Totals
+            totalBillings += valReceived;
             const {rate} = getRate(r.doctorName, r.jsDate);
-            const fee = (r.AmountReceived || 0) * (rate / 100);
-            totalPracticeRev += fee;
+            totalPracticeRev += valReceived * (rate / 100);
+
+            // Populate Bar Chart Data
+            revByDoc[r.doctorName] = (revByDoc[r.doctorName] || 0) + valReceived;
+
+            // Populate Trend Chart Data
+            if(!docTrends[r.doctorName]) docTrends[r.doctorName] = Array(12).fill(0);
+            const mIndex = r.jsDate.getMonth(); 
+            let fyIndex = (mIndex + 6) % 12; // Shift so July is index 0
+            docTrends[r.doctorName][fyIndex] += valReceived;
         });
 
+        // 3. Update Text Cards
         document.getElementById('dashTotalRev').innerText = formatCurr(totalBillings);
         document.getElementById('dashPracRev').innerText = formatCurr(totalPracticeRev);
         document.getElementById('dashDocCount').innerText = [...new Set(fyRecords.map(r => r.doctorName))].length;
         
-        // (Charts logic remains the same, just ensure it uses 'AmountReceived')
-        const revByDoc = {}; 
-        fyRecords.forEach(r => {
-            revByDoc[r.doctorName] = (revByDoc[r.doctorName] || 0) + (r.AmountReceived || 0);
-        });
-        // ... (Rest of chart logic can stay or be updated to use AmountReceived) ...
+        // 4. Draw Revenue Bar Chart
         const docNames = Object.keys(revByDoc);
-        const barDatasets = docNames.map((name, i) => ({ label: name, data: [revByDoc[name]], backgroundColor: DOCTOR_COLORS[i % DOCTOR_COLORS.length] }));
+        const barDatasets = docNames.map((name, i) => ({ 
+            label: name, 
+            data: [revByDoc[name]], 
+            backgroundColor: DOCTOR_COLORS[i % DOCTOR_COLORS.length] 
+        }));
         createChart('doctorChart', 'bar', ['Billings'], barDatasets, 'bar');
-        
-        // ... (If you need the Trend Chart logic updated, let me know, otherwise the existing one works if we map the variable correctly)
+
+        // 5. Draw Trend Line Chart
+        const monthKeys = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+        const trendDatasets = Object.keys(docTrends).map((docName, i) => {
+            const docIndex = docNames.indexOf(docName);
+            const color = (docIndex !== -1) ? DOCTOR_COLORS[docIndex % DOCTOR_COLORS.length] : '#000';
+            return { 
+                label: docName, 
+                data: docTrends[docName], 
+                borderColor: color, 
+                backgroundColor: 'transparent', 
+                tension: 0.1 
+            };
+        });
+        createChart('trendChart', 'line', monthKeys, trendDatasets, 'line');
     }
 
     function createChart(canvasId, type, labels, datasets, mode) {
@@ -518,22 +545,27 @@
             panel.appendChild(div);
         });
     }
-    // --- UPDATED DOCTOR SETTINGS LOGIC ---
+    
+    // --- REPLACEMENT CODE FOR DOCTOR SETTINGS ---
     function openConfig(name) {
         currentEditingDoc = name;
         document.getElementById('noDocSelected').style.display = 'none';
         document.getElementById('configPanel').style.display = 'block';
         document.getElementById('configTitle').innerText = name;
         
+        // Load settings or default to empty
         const set = doctorSettingsMap[name] || { timeline: [], exceptions: {}, bsb: "", acc: "" };
         
-        // Load Bank Details
+        // 1. LOAD BANK DETAILS
         document.getElementById('docBSB').value = set.bsb || "";
         document.getElementById('docAcc').value = set.acc || "";
 
+        // 2. LOAD TIMELINES
         document.getElementById('timelineContainer').innerHTML = "";
-        document.getElementById('exceptionsContainer').innerHTML = "";
         (set.timeline || []).forEach(r => addTimelineRow(r.startDate, r.fee));
+
+        // 3. LOAD EXCEPTIONS
+        document.getElementById('exceptionsContainer').innerHTML = "";
         Object.entries(set.exceptions || {}).forEach(([m, f]) => addExceptionRow(m, f));
     }
     window.addTimelineRow = (d="", f="") => {
@@ -547,29 +579,41 @@
         document.getElementById('exceptionsContainer').appendChild(div);
     };
     window.saveDoctorSettings = async () => {
+        // 1. CAPTURE TIMELINE INPUTS
         const tl = [];
         document.querySelectorAll('.tl-d').forEach((el, i) => {
             const f = document.querySelectorAll('.tl-f')[i].value;
             if(el.value && f) tl.push({ startDate: el.value, fee: f });
         });
+
+        // 2. CAPTURE EXCEPTION INPUTS
         const ex = {};
         document.querySelectorAll('.ex-m').forEach((el, i) => {
             const f = document.querySelectorAll('.ex-f')[i].value;
             if(el.value && f) ex[el.value] = f;
         });
 
-        // Capture Bank Details
+        // 3. CAPTURE BANK DETAILS (NEW)
         const bsb = document.getElementById('docBSB').value;
         const acc = document.getElementById('docAcc').value;
 
-        await db.collection("doctor_settings").doc(currentEditingDoc).set({ 
-            timeline: tl, 
-            exceptions: ex,
-            bsb: bsb,
-            acc: acc
-        });
-        document.getElementById('saveStatus').innerText = "Saved!";
-        loadAllData();
+        // 4. SAVE TO FIREBASE
+        try {
+            await db.collection("doctor_settings").doc(currentEditingDoc).set({ 
+                timeline: tl, 
+                exceptions: ex,
+                bsb: bsb,
+                acc: acc
+            });
+            document.getElementById('saveStatus').innerText = "Saved!";
+            document.getElementById('saveStatus').style.color = "green";
+            
+            // Reload data to ensure the system knows about the changes immediately
+            loadAllData();
+        } catch (e) {
+            document.getElementById('saveStatus').innerText = "Error: " + e.message;
+            document.getElementById('saveStatus').style.color = "red";
+        }
     };
      // --- UPDATED EXCEL UPLOAD LOGIC ---
     // The exact list of columns you provided
