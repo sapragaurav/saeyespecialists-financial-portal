@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V3.7</title>
+    <title>SA Eye Specialists Portal - V3.8</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.7</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.8</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -112,34 +112,39 @@
                 <span style="font-size:12px; color:#666; margin-left:10px;">(Jul 1 - Jun 30)</span>
             </div>
 
-            
-        <div style="display:flex; gap:20px; margin-bottom:20px;">
-            <div class="stat-card clickable-card" style="flex:1;" onclick="goToDataTabWithFY()">
-                <h3>Billings (Click for Data)</h3>
-                <div class="big-num" id="dashTotalRev">$0.00</div>
-                <span style="font-size:11px; color:#0056b3;">View Details &rarr;</span>
+            <div style="display:flex; gap:20px; margin-bottom:20px;">
+                <div class="stat-card clickable-card" style="flex:1;" onclick="goToDataTabWithFY()">
+                    <h3>Total Billings (Click for Data)</h3>
+                    <div class="big-num" id="dashTotalRev">$0.00</div>
+                    <span style="font-size:11px; color:#0056b3;">View Details &rarr;</span>
+                </div>
+        
+                <div class="stat-card" style="flex:1;">
+                    <h3>Total Practice Revenue</h3>
+                    <div class="big-num" id="dashPracRev" style="color:#28a745;">$0.00</div>
+                    <span style="font-size:11px; color:#666;">Calculated from Commission</span>
+                </div>
             </div>
-    
-        <div class="stat-card" style="flex:1;">
-            <h3>Practice Revenue</h3>
-            <div class="big-num" id="dashPracRev" style="color:#28a745;">$0.00</div>
-            <span style="font-size:11px; color:#666;">Calculated from Commission</span>
-        </div>
-
-        <div class="stat-card" style="flex:1;">
-            <h3>Active Doctors (Selected FY)</h3>
-            <div class="big-num" id="dashDocCount">0</div>
-        </div>
-    </div>
 
             <div class="dashboard-grid">
                 <div class="stat-card">
-                    <h3>Revenue by Doctor</h3>
-                    <canvas id="doctorChart" style="max-height: 300px;"></canvas>
+                    <h3>Billings by Doctor</h3>
+                    <canvas id="chartBillBar" style="max-height: 300px;"></canvas>
                 </div>
                 <div class="stat-card">
-                    <h3>Monthly Trend by Doctor</h3>
-                    <canvas id="trendChart" style="max-height: 300px;"></canvas>
+                    <h3>Practice Revenue by Doctor</h3>
+                    <canvas id="chartPracBar" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+
+            <div class="dashboard-grid" style="margin-top: 20px;">
+                <div class="stat-card">
+                    <h3>Monthly Billing Trend</h3>
+                    <canvas id="chartBillLine" style="max-height: 300px;"></canvas>
+                </div>
+                <div class="stat-card">
+                    <h3>Monthly Practice Revenue Trend</h3>
+                    <canvas id="chartPracLine" style="max-height: 300px;"></canvas>
                 </div>
             </div>
         </div>
@@ -229,7 +234,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 3.7</span>
+            <span>Build Version: 3.8</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -532,53 +537,81 @@
         
         const fyRecords = allRecords.filter(r => getFinancialYear(r.jsDate) === selectedFY);
 
+        // --- UPDATED VISUALS (4 Charts) ---
+    function renderVisuals() {
+        const selectedFY = document.getElementById('fyDropdown').value;
+        if(!allRecords.length || selectedFY === "No Data") return;
+        
+        const fyRecords = allRecords.filter(r => getFinancialYear(r.jsDate) === selectedFY);
+
         // 1. Calculate Totals
         let totalBillings = 0;
         let totalPracticeRev = 0;
 
-        const revByDoc = {}; 
-        const docTrends = {}; 
+        // 2. Prepare Data Buckets (4 Buckets now)
+        const billByDoc = {}; 
+        const pracByDoc = {};
+        const billTrends = {}; 
+        const pracTrends = {};
 
         fyRecords.forEach(r => {
             const valReceived = r.AmountReceived || 0; 
-
-            totalBillings += valReceived;
             const {rate} = getRate(r.doctorName, r.jsDate);
-            totalPracticeRev += valReceived * (rate / 100);
+            const fee = valReceived * (rate / 100);
 
-            revByDoc[r.doctorName] = (revByDoc[r.doctorName] || 0) + valReceived;
+            // Grand Totals
+            totalBillings += valReceived;
+            totalPracticeRev += fee;
 
-            if(!docTrends[r.doctorName]) docTrends[r.doctorName] = Array(12).fill(0);
+            // Populate Bar Charts Data
+            billByDoc[r.doctorName] = (billByDoc[r.doctorName] || 0) + valReceived;
+            pracByDoc[r.doctorName] = (pracByDoc[r.doctorName] || 0) + fee;
+
+            // Populate Line Charts Data (Trends)
+            if(!billTrends[r.doctorName]) billTrends[r.doctorName] = Array(12).fill(0);
+            if(!pracTrends[r.doctorName]) pracTrends[r.doctorName] = Array(12).fill(0);
+            
             const mIndex = r.jsDate.getMonth(); 
-            let fyIndex = (mIndex + 6) % 12; 
-            docTrends[r.doctorName][fyIndex] += valReceived;
+            let fyIndex = (mIndex + 6) % 12; // Shift so July is index 0
+            
+            billTrends[r.doctorName][fyIndex] += valReceived;
+            pracTrends[r.doctorName][fyIndex] += fee;
         });
 
+        // 3. Update Text Cards
         document.getElementById('dashTotalRev').innerText = formatCurr(totalBillings);
         document.getElementById('dashPracRev').innerText = formatCurr(totalPracticeRev);
-        document.getElementById('dashDocCount').innerText = [...new Set(fyRecords.map(r => r.doctorName))].length;
         
-        const docNames = Object.keys(revByDoc);
-        const barDatasets = docNames.map((name, i) => ({ 
+        // 4. Draw Charts
+        const docNames = Object.keys(billByDoc);
+        const monthKeys = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+
+        // Helper to generate datasets
+        const getBarDataset = (dataObj) => docNames.map((name, i) => ({ 
             label: name, 
-            data: [revByDoc[name]], 
+            data: [dataObj[name]], 
             backgroundColor: DOCTOR_COLORS[i % DOCTOR_COLORS.length] 
         }));
-        createChart('doctorChart', 'bar', ['Billings'], barDatasets, 'bar');
 
-        const monthKeys = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-        const trendDatasets = Object.keys(docTrends).map((docName, i) => {
+        const getLineDataset = (dataObj) => Object.keys(dataObj).map((docName, i) => {
             const docIndex = docNames.indexOf(docName);
             const color = (docIndex !== -1) ? DOCTOR_COLORS[docIndex % DOCTOR_COLORS.length] : '#000';
             return { 
                 label: docName, 
-                data: docTrends[docName], 
+                data: dataObj[docName], 
                 borderColor: color, 
                 backgroundColor: 'transparent', 
                 tension: 0.1 
             };
         });
-        createChart('trendChart', 'line', monthKeys, trendDatasets, 'line');
+
+        // Render Row 1 (Bars)
+        createChart('chartBillBar', 'bar', ['Billings'], getBarDataset(billByDoc), 'bar');
+        createChart('chartPracBar', 'bar', ['Revenue'], getBarDataset(pracByDoc), 'bar');
+
+        // Render Row 2 (Lines)
+        createChart('chartBillLine', 'line', monthKeys, getLineDataset(billTrends), 'line');
+        createChart('chartPracLine', 'line', monthKeys, getLineDataset(pracTrends), 'line');
     }
 
     function createChart(canvasId, type, labels, datasets, mode) {
