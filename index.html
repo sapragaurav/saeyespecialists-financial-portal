@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V3.5</title>
+    <title>SA Eye Specialists Portal - V3.6</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.5</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.6</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -229,7 +229,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 3.5</span>
+            <span>Build Version: 3.6</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -297,7 +297,7 @@
         } catch (e) { document.getElementById('dbStatus').innerText = "Error: " + e.message; }
     }
 
-// --- REPLACEMENT CODE FOR PDF GENERATION (Phase 3) ---
+// --- REPLACEMENT CODE FOR PDF GENERATION (V3.6 - Tax Invoice Logic) ---
     window.generatePDF = function() {
         const docName = document.getElementById('doctorFilter').value;
         const monthFilter = document.getElementById('monthFilter').value;
@@ -305,7 +305,7 @@
         
         if(!docName) { alert("Please filter by a specific Doctor first."); return; }
         
-        // 1. GET FILTERED DATA (To calculate hidden summaries)
+        // 1. GET FILTERED DATA
         const pdfData = allRecords.filter(r => {
             const matchFY = !fyFilter || getFinancialYear(r.jsDate) === fyFilter;
             const matchM = !monthFilter || r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }) === monthFilter;
@@ -313,23 +313,48 @@
             return matchFY && matchM && matchDoc;
         });
 
-        // 2. DEFINE BREAKDOWN COLUMNS (The hidden data)
-        const summaryKeys = [
-            "CashReceived", "EFTPOSReceived", "CreditCardReceived", 
-            "ExtrasCoverReceived", "BankTransferReceived", "ChequeReceived", 
-            "DepositApplied", "BulkBillReceived", "DVAReceived", 
-            "ECLIPSEReceived", "90DayGapReceived"
+        // 2. DEFINE GROUPS
+        // "Cash" goes to SAES directly. Everything else goes to Doctor (Tyro).
+        const cashKey = "CashReceived";
+        const tyroKeys = [
+            "EFTPOSReceived", "CreditCardReceived", "ExtrasCoverReceived", 
+            "BankTransferReceived", "ChequeReceived", "DepositApplied", 
+            "BulkBillReceived", "DVAReceived", "ECLIPSEReceived", "90DayGapReceived"
         ];
         
-        // 3. CALCULATE TOTALS FOR SUMMARY
-        let breakdown = {};
-        summaryKeys.forEach(k => breakdown[k] = 0);
-        
+        // 3. CALCULATE TOTALS
+        let totalTyro = 0;
+        let totalCash = 0;
+        let totalCommission = 0; // We calculate this per-record to be accurate if rates changed mid-month
+
+        let breakdown = {}; // To store sums for each specific type (e.g. DVA: $200)
+        [cashKey, ...tyroKeys].forEach(k => breakdown[k] = 0);
+
         pdfData.forEach(r => {
-            summaryKeys.forEach(k => {
-                breakdown[k] += (r[k] || 0);
+            // Cash Sum
+            const cVal = r[cashKey] || 0;
+            totalCash += cVal;
+            breakdown[cashKey] += cVal;
+
+            // Tyro Sum
+            let rTyro = 0;
+            tyroKeys.forEach(k => {
+                const val = r[k] || 0;
+                rTyro += val;
+                breakdown[k] += val;
             });
+            totalTyro += rTyro;
+
+            // Commission Calculation (Per record accuracy)
+            const totalBillingsForRecord = cVal + rTyro;
+            const {rate} = getRate(r.doctorName, r.jsDate);
+            totalCommission += totalBillingsForRecord * (rate / 100);
         });
+
+        const totalReceipts = totalTyro + totalCash;
+        const gst = totalCommission * 0.10;
+        const totalPayableToSAES = totalCommission + gst;
+        const finalBalance = totalPayableToSAES - totalCash;
 
         // --- START PDF DRAWING ---
         const { jsPDF } = window.jspdf;
@@ -338,79 +363,97 @@
         const logoImg = document.getElementById('pdfLogoSource');
         if (logoImg.complete) doc.addImage(logoImg, 'PNG', 15, 10, 40, 15);
         
-        // Header Info
-        doc.setFontSize(16); doc.text("Remittance Advice / Tax Invoice", 195, 20, { align: "right" });
+        // HEADER: TAX INVOICE
+        doc.setFontSize(16); doc.text("TAX INVOICE", 195, 20, { align: "right" });
         doc.setFontSize(10); doc.setTextColor(100);
         const reportPeriod = monthFilter ? monthFilter : (fyFilter || "All Time");
         doc.text(`Period: ${reportPeriod}`, 195, 27, { align: "right" });
-        doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 195, 32, { align: "right" });
+        doc.text(`Date: ${new Date().toLocaleDateString()}`, 195, 32, { align: "right" });
+        
+        // STATIC ACCOUNT DETAILS (Point 1)
+        doc.setTextColor(0); doc.setFont(undefined, 'bold');
+        doc.text("Pay to: SA Eye Specialists", 195, 42, { align: "right" });
+        doc.setFont(undefined, 'normal');
+        doc.text("BSB: 065 137", 195, 47, { align: "right" });
+        doc.text("Account: 1105 9977", 195, 52, { align: "right" });
 
         doc.setFontSize(12); doc.setTextColor(0); doc.text(`To: ${docName}`, 15, 40);
         
-        // Main Totals (Top Box)
-        const tRev = document.getElementById('totalReceived').innerText;
-        const tFee = document.getElementById('totalFee').innerText;
-        const tGST = document.getElementById('totalGST').innerText;
-        const tRem = document.getElementById('totalRemit').innerText;
-
-        doc.setFillColor(240, 240, 240); doc.rect(15, 45, 180, 25, 'F');
-        doc.setFontSize(10);
-        doc.text("Total Billings:", 20, 55);      doc.text(tRev, 60, 55, { align: "right" });
-        doc.text("Practice Revenue:", 20, 62);    doc.text(tFee, 60, 62, { align: "right" });
-        doc.text("GST (10%):", 100, 55);          doc.text(tGST, 140, 55, { align: "right" });
-        doc.setFontSize(12); doc.setFont(undefined, 'bold');
-        doc.text("Total Remittance:", 100, 62);   doc.text(tRem, 160, 62, { align: "right" });
-
-        // Main Table
-        doc.autoTable({
-            html: '#dataTableElement', startY: 80, theme: 'striped', headStyles: { fillColor: [0, 86, 179] },
-            columns: [ 
-                { header: 'Date', dataKey: 0 }, 
-                { header: 'Location', dataKey: 2 }, 
-                { header: 'Billings', dataKey: 3 }, 
-                { header: 'Prac Rev', dataKey: 5 }, 
-                { header: 'GST', dataKey: 6 }, 
-                { header: 'Remit', dataKey: 7 } 
-            ],
-            didParseCell: function(data) { 
-                if (data.column.index === 1 || data.column.index === 4 || data.column.index === 8) data.cell.styles.display = 'none'; 
+        // --- INVOICE TABLE (Point 6 Structure) ---
+        let startY = 65;
+        
+        // We build the rows for the table dynamically
+        let tableBody = [];
+        
+        // A. Add Tyro Items
+        tyroKeys.forEach(key => {
+            if(breakdown[key] > 0) {
+                const label = key.replace(/([A-Z])/g, ' $1').replace('Received','').trim(); // "DVAReceived" -> "DVA"
+                tableBody.push([label, formatCurr(breakdown[key]), "-"]);
             }
         });
 
-        // --- NEW SUMMARY SECTION ---
-        let finalY = doc.lastAutoTable.finalY + 10; // Start below the main table
+        // B. Add Cash Item
+        tableBody.push(["Cash", "-", formatCurr(totalCash)]);
+
+        // C. Totals Row
+        tableBody.push([
+            { content: "Total Receipts", styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
+            { content: formatCurr(totalTyro), styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
+            { content: formatCurr(totalCash), styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } }
+        ]);
+
+        // D. Commission & Deductions Logic (Spanning Columns)
+        // Helper to add a full-width summary row
+        const addSummaryRow = (label, value, isBold = false) => {
+            tableBody.push([
+                { content: label, colSpan: 2, styles: { halign: 'right', fontStyle: isBold ? 'bold' : 'normal' } },
+                { content: formatCurr(value), styles: { fontStyle: isBold ? 'bold' : 'normal' } }
+            ]);
+        };
+
+        // Add empty spacer
+        tableBody.push([{ content: "", colSpan: 3, styles: { cellPadding: 1, fillColor: [255, 255, 255] } }]);
+
+        // Commission
+        addSummaryRow(`Practice Commission (Avg)`, totalCommission);
+        addSummaryRow("GST (10%)", gst);
         
-        // Check if we need a new page
-        if (finalY > 250) { doc.addPage(); finalY = 20; }
+        // Total Payable
+        tableBody.push([
+            { content: "Total Payable to SAES", colSpan: 2, styles: { halign: 'right', fontStyle: 'bold', fillColor: [231, 241, 255] } },
+            { content: formatCurr(totalPayableToSAES), styles: { fontStyle: 'bold', fillColor: [231, 241, 255], textColor: [0, 86, 179] } }
+        ]);
 
-        doc.setFontSize(11); doc.setTextColor(0); doc.setFont(undefined, 'bold');
-        doc.text("Payment Breakdown Summary", 15, finalY);
-        doc.setLineWidth(0.5); doc.line(15, finalY + 2, 70, finalY + 2); // Underline
+        // Less Cash
+        addSummaryRow("Less: Cash already received at SAES", -totalCash);
 
-        const summaryData = summaryKeys.map(key => {
-            // Convert "CashReceived" to "Cash Received" for display
-            const label = key.replace(/([A-Z])/g, ' $1').trim(); 
-            return [label, formatCurr(breakdown[key])];
-        });
+        // FINAL BALANCE
+        tableBody.push([
+            { content: `Balance Payable to SAES (${reportPeriod})`, colSpan: 2, styles: { halign: 'right', fontStyle: 'bold', fontSize: 11, fillColor: [0, 86, 179], textColor: [255, 255, 255] } },
+            { content: formatCurr(finalBalance), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [0, 86, 179], textColor: [255, 255, 255] } }
+        ]);
 
+        // DRAW TABLE
         doc.autoTable({
-            startY: finalY + 5,
-            head: [['Payment Type', 'Amount']],
-            body: summaryData,
+            startY: startY,
+            head: [['Description', 'Received in Tyro', 'Cash at SAES']],
+            body: tableBody,
             theme: 'grid',
-            styles: { fontSize: 9, cellPadding: 2 },
-            headStyles: { fillColor: [100, 100, 100] },
-            columnStyles: { 1: { halign: 'right', font: 'courier' } },
-            margin: { left: 15 },
-            tableWidth: 80 // Keep it compact
+            headStyles: { fillColor: [0, 86, 179] }, // Blue Header (Point 5)
+            columnStyles: { 
+                0: { cellWidth: 80 },
+                1: { halign: 'right', font: 'courier' },
+                2: { halign: 'right', font: 'courier' }
+            }
         });
 
         // Footer
         const pageHeight = doc.internal.pageSize.height;
-        doc.setFontSize(8); doc.setTextColor(150); doc.setFont(undefined, 'normal');
+        doc.setFontSize(8); doc.setTextColor(150);
         doc.text("SA Eye Specialists - Financial Portal", 105, pageHeight - 10, { align: "center" });
         
-        const fileName = `Remittance_${docName}_${reportPeriod}.pdf`.replace(/[^a-z0-9]/gi, '_');
+        const fileName = `Invoice_${docName}_${reportPeriod}.pdf`.replace(/[^a-z0-9]/gi, '_');
         doc.save(fileName);
     };
     
