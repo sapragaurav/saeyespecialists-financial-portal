@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.1</title>
+    <title>SA Eye Specialists Portal - V4.2</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.1</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.2</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -234,7 +234,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.1</span>
+            <span>Build Version: 4.2</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -287,7 +287,7 @@
         }
     });
     
-    // --- FIX C: UPDATED LOADER (Updates Dropdowns Correctly) ---
+    // --- STEP 2A: LOADER THAT READS DYNAMIC YEARS ---
     async function loadScopedData(targetFY) {
         document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
         
@@ -297,9 +297,19 @@
 
         try {
             const sSnap = await db.collection("doctor_settings").get();
-            doctorSettingsMap = {}; sSnap.forEach(d => doctorSettingsMap[d.id] = d.data());
+            doctorSettingsMap = {}; 
+            
+            // Extract the Dynamic Year List if it exists
+            let dynamicYears = [];
+            sSnap.forEach(d => {
+                if(d.id === "meta_years") {
+                    dynamicYears = d.data().list || [];
+                } else {
+                    doctorSettingsMap[d.id] = d.data();
+                }
+            });
 
-            // Query using dateISO
+            // Query Data
             const rSnap = await db.collection("daily_reports")
                 .where('dateISO', '>=', startDate)
                 .where('dateISO', '<=', endDate)
@@ -315,16 +325,12 @@
 
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
             
-            // Refresh Dropdowns (Important: Do this AFTER loading to ensure sync)
-            initFYDropdowns(); 
-            // Force select the requested FY (in case init reset it)
-            document.getElementById('fyDropdown').value = targetFY;
-            document.getElementById('dataFyFilter').value = targetFY;
-
+            // Pass the dynamic list to the dropdown initializer
+            initFYDropdowns(targetFY, dynamicYears); 
+            
             populateMonthDropdown();
             renderVisuals();
             
-            // If currently on Data tab, render table
             if (document.getElementById('tab-data').classList.contains('active')) {
                 document.getElementById('applyFilters').click();
             }
@@ -335,6 +341,55 @@
             document.getElementById('dbStatus').innerText = "Error: " + e.message; 
             console.error(e);
         }
+    }
+
+    // --- STEP 2B: DYNAMIC DROPDOWN GENERATOR ---
+    function initFYDropdowns(activeFY, availableYears = []) {
+        const selDash = document.getElementById('fyDropdown'); 
+        const selData = document.getElementById('dataFyFilter');
+        
+        // Logic: Use database list if available, otherwise use default (Current + Previous)
+        let fyList = [];
+        
+        if (availableYears.length > 0) {
+            // Sort Descending (Newest first)
+            fyList = availableYears.sort().reverse();
+            
+            // Safety: Ensure the requested 'activeFY' is in the list (if it's new)
+            if(!fyList.includes(activeFY)) fyList.unshift(activeFY);
+        } else {
+            // Fallback Logic (if no data uploaded yet)
+            const currYear = new Date().getFullYear();
+            const startY = new Date().getMonth() >= 6 ? currYear : currYear - 1;
+            fyList.push(`FY${startY.toString().substr(2)}/${(startY+1).toString().substr(2)}`);
+            fyList.push(`FY${(startY-1).toString().substr(2)}/${startY.toString().substr(2)}`);
+        }
+
+        // Avoid duplicates just in case
+        fyList = [...new Set(fyList)];
+
+        // Render Options
+        selDash.innerHTML = "";
+        selData.innerHTML = ""; 
+
+        fyList.forEach(fy => {
+            selDash.innerHTML += `<option value="${fy}">${fy}</option>`;
+            selData.innerHTML += `<option value="${fy}">${fy}</option>`;
+        });
+
+        // Set Selected Value
+        selDash.value = activeFY;
+        selData.value = activeFY;
+
+        // Listeners
+        selDash.onchange = () => {
+            selData.value = selDash.value;
+            loadScopedData(selDash.value);
+        };
+        selData.onchange = () => {
+            selDash.value = selData.value;
+            loadScopedData(selData.value);
+        };
     }
 
     // --- TAX INVOICE GENERATOR ---
@@ -733,13 +788,17 @@
             document.getElementById('applyFilters').click();
         }
     };
+    // --- STEP 3: FILTERED DOCTOR LIST ---
     function renderDoctorList() {
         const doctors = [...new Set(allRecords.map(r => r.doctorName))].sort();
         const panel = document.getElementById('doctorListPanel'); panel.innerHTML = "";
         doctors.forEach(name => {
-            const div = document.createElement('div'); div.className = "doctor-item"; div.innerText = name;
-            div.onclick = () => { document.querySelectorAll('.doctor-item').forEach(i => i.classList.remove('selected')); div.classList.add('selected'); openConfig(name); };
-            panel.appendChild(div);
+            // Safety Check: Don't show the system settings file
+            if (name !== "meta_years") {
+                const div = document.createElement('div'); div.className = "doctor-item"; div.innerText = name;
+                div.onclick = () => { document.querySelectorAll('.doctor-item').forEach(i => i.classList.remove('selected')); div.classList.add('selected'); openConfig(name); };
+                panel.appendChild(div);
+            }
         });
     }
     
@@ -816,7 +875,7 @@
         "90 Day Gap Received", "Amount Received"
     ];
 
-    // --- STEP 1: UPDATED EXCEL UPLOAD (Adds dateISO for Server Filtering) ---
+    // --- STEP 1: EXCEL UPLOAD WITH DYNAMIC FY REGISTRATION ---
     document.getElementById('excelFile').onchange = function() {
         const status = document.getElementById('uploadStatus');
         status.style.color = "blue";
@@ -835,9 +894,12 @@
                     if((rows[i]||[]).includes("Doctor")) hIdx=i;
                 }
 
-                // Create ISO Date (YYYY-MM-DD) for sorting
                 const [d, m, y] = date.split('/');
-                const dateISO = `${y}-${m}-${d}`; // e.g. "2025-12-25"
+                const dateISO = `${y}-${m}-${d}`;
+                
+                // 1. Calculate the Financial Year of this file
+                const fileDate = new Date(`${y}-${m}-${d}`);
+                const fileFY = getFinancialYear(fileDate);
 
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx });
                 const batch = db.batch();
@@ -854,7 +916,7 @@
                         
                         let dataObj = {
                             reportDate: date,
-                            dateISO: dateISO, // <--- NEW FIELD
+                            dateISO: dateISO,
                             doctorName: doc,
                             location: loc,
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
@@ -869,15 +931,20 @@
                         count++;
                     }
                 }
+                
+                // 2. REGISTER THIS FY IN THE DATABASE
+                // We use 'arrayUnion' so it only adds if it doesn't exist yet (No duplicates)
+                const metaRef = db.collection("doctor_settings").doc("meta_years");
+                batch.set(metaRef, { 
+                    list: firebase.firestore.FieldValue.arrayUnion(fileFY) 
+                }, { merge: true });
+
                 await batch.commit();
                 status.style.color = "green";
                 status.innerText = `✔ Saved ${count} records`;
                 
-                // Reload using the new logic
-                setTimeout(() => loadScopedData(getFinancialYear(new Date())), 1000); 
-                // FIX: Reload using the date from the file, or default to current view
-                const fileYear = getFinancialYear(new Date(date.split('/').reverse().join('-'))); 
-                setTimeout(() => loadScopedData(fileYear), 1000);
+                // Reload the year we just uploaded
+                setTimeout(() => loadScopedData(fileFY), 1000); 
                 
             } catch(e) {
                 status.style.color = "red";
@@ -887,6 +954,7 @@
         };
         reader.readAsArrayBuffer(this.files[0]);
     };
+    
     window.deleteRecord = async (id) => { 
     if(confirm("Delete?")) { 
         await db.collection("daily_reports").doc(id).delete(); 
