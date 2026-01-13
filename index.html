@@ -275,31 +275,63 @@
     document.getElementById('password').addEventListener("keypress", (e) => { if(e.key === "Enter") loginFunc(); });
     window.logout = () => auth.signOut().then(() => location.reload());
 
+     // Updated Auth Listener
     auth.onAuthStateChanged(user => {
-        if (user) {
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('appSection').classList.remove('hidden');
-            loadAllData();
+    if (user) {
+        document.getElementById('loginSection').classList.add('hidden');
+        document.getElementById('appSection').classList.remove('hidden');
+        
+        // FIX: Calculate "Today's Financial Year" and load it
+        const currentFY = getFinancialYear(new Date());
+        loadScopedData(currentFY);
         }
     });
+    
+    // --- STEP 2: SCOPED DATA LOADER (Server-Side Filtering) ---
+    async function loadScopedData(targetFY) {
+        document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
+        
+        // 1. Convert FY String (FY25/26) to Date Range
+        const startYear = "20" + targetFY.substring(2, 4); // "25" -> "2025"
+        const startDate = `${startYear}-07-01`;
+        const endDate = `${parseInt(startYear)+1}-06-30`;
 
-    // --- MAIN DATA LOADER ---
-    async function loadAllData() {
-        document.getElementById('dbStatus').innerText = "Status: Loading...";
         try {
+            // 2. Load Settings first (always needed)
             const sSnap = await db.collection("doctor_settings").get();
             doctorSettingsMap = {}; sSnap.forEach(d => doctorSettingsMap[d.id] = d.data());
 
-            const rSnap = await db.collection("daily_reports").get();
-            allRecords = []; rSnap.forEach(d => { let r=d.data(); r.id=d.id; r.jsDate=parseDate(r.reportDate); allRecords.push(r); });
+            // 3. Query ONLY the specific date range
+            // Note: This requires the 'dateISO' field we added in Step 1
+            const rSnap = await db.collection("daily_reports")
+                .where('dateISO', '>=', startDate)
+                .where('dateISO', '<=', endDate)
+                .get();
 
-            document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records`;
+            allRecords = []; 
+            rSnap.forEach(d => { 
+                let r=d.data(); 
+                r.id=d.id; 
+                r.jsDate=parseDate(r.reportDate); 
+                allRecords.push(r); 
+            });
+
+            document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
             
-            initFYDropdowns();
+            // 4. Update UI
+            // If this is the first load, set up the dropdowns
+            if(document.getElementById('fyDropdown').options.length <= 1) {
+                initFYDropdowns(targetFY); 
+            }
+            
             populateMonthDropdown();
             renderVisuals();
             renderDoctorList();
-        } catch (e) { document.getElementById('dbStatus').innerText = "Error: " + e.message; }
+            
+        } catch (e) { 
+            document.getElementById('dbStatus').innerText = "Error: " + e.message; 
+            console.error(e);
+        }
     }
 
     // --- TAX INVOICE GENERATOR ---
@@ -457,16 +489,47 @@
         doc.save(fileName);
     };
 
-    // --- DROPDOWNS ---
-    function initFYDropdowns() {
-        const fySet = new Set(); allRecords.forEach(r => fySet.add(getFinancialYear(r.jsDate)));
-        const sortedFY = Array.from(fySet).sort().reverse();
-        const selDash = document.getElementById('fyDropdown'); selDash.innerHTML = "";
-        if (sortedFY.length === 0) selDash.innerHTML = "<option>No Data</option>";
-        sortedFY.forEach(fy => selDash.innerHTML += `<option value="${fy}">${fy}</option>`);
-        const selData = document.getElementById('dataFyFilter'); selData.innerHTML = '<option value="">-- All FYs --</option>';
-        sortedFY.forEach(fy => selData.innerHTML += `<option value="${fy}">${fy}</option>`);
-        selDash.onchange = renderVisuals; selData.onchange = populateMonthDropdown;
+    // Updated Dropdown Logic (Generates options logically)
+    function initFYDropdowns(activeFY) {
+        const selDash = document.getElementById('fyDropdown'); 
+        const selData = document.getElementById('dataFyFilter');
+        
+        selDash.innerHTML = "";
+        selData.innerHTML = ""; // Removing "All Data" option as requested
+
+        // Generate Current FY and 2 previous years
+        const currYear = new Date().getFullYear();
+        // Simple logic: generate FYs based on current date
+        const fyList = [];
+        // If we are in Jan-Jun 2026, current FY is 25/26. Start year is 2025.
+        const startY = new Date().getMonth() >= 6 ? currYear : currYear - 1;
+        
+        // Add 3 years (Current, Previous, Before that)
+        for(let i=0; i<3; i++) {
+            const y = startY - i;
+            const fyStr = `FY${y.toString().substr(2)}/${(y+1).toString().substr(2)}`;
+            fyList.push(fyStr);
+        }
+
+        fyList.forEach(fy => {
+            // Dashboard Dropdown
+            selDash.innerHTML += `<option value="${fy}" ${fy === activeFY ? 'selected' : ''}>${fy}</option>`;
+            // Data Tab Dropdown
+            selData.innerHTML += `<option value="${fy}" ${fy === activeFY ? 'selected' : ''}>${fy}</option>`;
+        });
+
+        // Add Listener: When Dashboard dropdown changes, FETCH new data
+        selDash.onchange = () => {
+            loadScopedData(selDash.value);
+            // Sync the other dropdown
+            selData.value = selDash.value;
+        };
+
+        // Add Listener: When Data dropdown changes, FETCH new data
+        selData.onchange = () => {
+            loadScopedData(selData.value);
+            selDash.value = selData.value; // Sync Dashboard
+        };
     }
     
     function populateMonthDropdown() {
@@ -713,7 +776,9 @@
             document.getElementById('saveStatus').innerText = "Saved!";
             document.getElementById('saveStatus').style.color = "green";
             
-            loadAllData();
+            // FIX: Reload current view instead of "All Data"
+            const activeFY = document.getElementById('fyDropdown').value;
+            loadScopedData(activeFY);
         } catch (e) {
             document.getElementById('saveStatus').innerText = "Error: " + e.message;
             document.getElementById('saveStatus').style.color = "red";
@@ -727,6 +792,7 @@
         "90 Day Gap Received", "Amount Received"
     ];
 
+    // --- STEP 1: UPDATED EXCEL UPLOAD (Adds dateISO for Server Filtering) ---
     document.getElementById('excelFile').onchange = function() {
         const status = document.getElementById('uploadStatus');
         status.style.color = "blue";
@@ -745,6 +811,10 @@
                     if((rows[i]||[]).includes("Doctor")) hIdx=i;
                 }
 
+                // Create ISO Date (YYYY-MM-DD) for sorting
+                const [d, m, y] = date.split('/');
+                const dateISO = `${y}-${m}-${d}`; // e.g. "2025-12-25"
+
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx });
                 const batch = db.batch();
                 let count = 0;
@@ -752,7 +822,6 @@
                 for(const r of json){
                     const keys = Object.keys(r);
                     const findKey = (name) => keys.find(k => k.trim().toLowerCase() === name.toLowerCase());
-                    
                     const doc = (r[findKey('Doctor')]||"").toString().trim();
                     
                     if(doc && !doc.includes("Total:")){
@@ -761,6 +830,7 @@
                         
                         let dataObj = {
                             reportDate: date,
+                            dateISO: dateISO, // <--- NEW FIELD
                             doctorName: doc,
                             location: loc,
                             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
@@ -778,7 +848,13 @@
                 await batch.commit();
                 status.style.color = "green";
                 status.innerText = `✔ Saved ${count} records`;
-                setTimeout(loadAllData, 1000);
+                
+                // Reload using the new logic
+                setTimeout(() => loadScopedData(getFinancialYear(new Date())), 1000); 
+                // FIX: Reload using the date from the file, or default to current view
+                const fileYear = getFinancialYear(new Date(date.split('/').reverse().join('-'))); 
+                setTimeout(() => loadScopedData(fileYear), 1000);
+                
             } catch(e) {
                 status.style.color = "red";
                 status.innerText = "Error: " + e.message;
@@ -787,7 +863,14 @@
         };
         reader.readAsArrayBuffer(this.files[0]);
     };
-    window.deleteRecord = async (id) => { if(confirm("Delete?")) { await db.collection("daily_reports").doc(id).delete(); loadAllData(); }};
+    window.deleteRecord = async (id) => { 
+    if(confirm("Delete?")) { 
+        await db.collection("daily_reports").doc(id).delete(); 
+        // FIX:
+        const activeFY = document.getElementById('fyDropdown').value;
+        loadScopedData(activeFY); 
+        }
+    };
 </script>
 </body>
 </html>
