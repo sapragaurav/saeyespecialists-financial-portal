@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V3.9</title>
+    <title>SA Eye Specialists Portal - V4.1</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V3.9</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.1</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -234,7 +234,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 3.9</span>
+            <span>Build Version: 4.1</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -287,22 +287,19 @@
         }
     });
     
-    // --- STEP 2: SCOPED DATA LOADER (Server-Side Filtering) ---
+    // --- FIX C: UPDATED LOADER (Updates Dropdowns Correctly) ---
     async function loadScopedData(targetFY) {
         document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
         
-        // 1. Convert FY String (FY25/26) to Date Range
-        const startYear = "20" + targetFY.substring(2, 4); // "25" -> "2025"
+        const startYear = "20" + targetFY.substring(2, 4); 
         const startDate = `${startYear}-07-01`;
         const endDate = `${parseInt(startYear)+1}-06-30`;
 
         try {
-            // 2. Load Settings first (always needed)
             const sSnap = await db.collection("doctor_settings").get();
             doctorSettingsMap = {}; sSnap.forEach(d => doctorSettingsMap[d.id] = d.data());
 
-            // 3. Query ONLY the specific date range
-            // Note: This requires the 'dateISO' field we added in Step 1
+            // Query using dateISO
             const rSnap = await db.collection("daily_reports")
                 .where('dateISO', '>=', startDate)
                 .where('dateISO', '<=', endDate)
@@ -318,14 +315,20 @@
 
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
             
-            // 4. Update UI
-            // If this is the first load, set up the dropdowns
-            if(document.getElementById('fyDropdown').options.length <= 1) {
-                initFYDropdowns(targetFY); 
-            }
-            
+            // Refresh Dropdowns (Important: Do this AFTER loading to ensure sync)
+            initFYDropdowns(); 
+            // Force select the requested FY (in case init reset it)
+            document.getElementById('fyDropdown').value = targetFY;
+            document.getElementById('dataFyFilter').value = targetFY;
+
             populateMonthDropdown();
             renderVisuals();
+            
+            // If currently on Data tab, render table
+            if (document.getElementById('tab-data').classList.contains('active')) {
+                document.getElementById('applyFilters').click();
+            }
+            
             renderDoctorList();
             
         } catch (e) { 
@@ -489,46 +492,51 @@
         doc.save(fileName);
     };
 
-    // Updated Dropdown Logic (Generates options logically)
-    function initFYDropdowns(activeFY) {
+    // --- FIX A: UPDATED DROPDOWNS (No Blank Option, Syncs Defaults) ---
+    function initFYDropdowns() {
         const selDash = document.getElementById('fyDropdown'); 
         const selData = document.getElementById('dataFyFilter');
         
-        selDash.innerHTML = "";
-        selData.innerHTML = ""; // Removing "All Data" option as requested
+        // Save current selection if it exists, otherwise default to logic
+        const currentSelection = selDash.value !== "Loading..." ? selDash.value : null;
 
-        // Generate Current FY and 2 previous years
+        selDash.innerHTML = "";
+        selData.innerHTML = ""; // Removed the "-- All FYs --" blank option
+
+        // Generate ONLY Current FY and Previous FY (Cleaner list)
         const currYear = new Date().getFullYear();
-        // Simple logic: generate FYs based on current date
-        const fyList = [];
-        // If we are in Jan-Jun 2026, current FY is 25/26. Start year is 2025.
         const startY = new Date().getMonth() >= 6 ? currYear : currYear - 1;
         
-        // Add 3 years (Current, Previous, Before that)
-        for(let i=0; i<3; i++) {
-            const y = startY - i;
-            const fyStr = `FY${y.toString().substr(2)}/${(y+1).toString().substr(2)}`;
-            fyList.push(fyStr);
-        }
+        const fyList = [];
+        // Add Current Year
+        fyList.push(`FY${startY.toString().substr(2)}/${(startY+1).toString().substr(2)}`);
+        // Add Previous Year
+        const prevY = startY - 1;
+        fyList.push(`FY${prevY.toString().substr(2)}/${(prevY+1).toString().substr(2)}`);
 
         fyList.forEach(fy => {
-            // Dashboard Dropdown
-            selDash.innerHTML += `<option value="${fy}" ${fy === activeFY ? 'selected' : ''}>${fy}</option>`;
-            // Data Tab Dropdown
-            selData.innerHTML += `<option value="${fy}" ${fy === activeFY ? 'selected' : ''}>${fy}</option>`;
+            selDash.innerHTML += `<option value="${fy}">${fy}</option>`;
+            selData.innerHTML += `<option value="${fy}">${fy}</option>`;
         });
 
-        // Add Listener: When Dashboard dropdown changes, FETCH new data
+        // Set Default to Current Selection OR First Item (Current FY)
+        if (currentSelection && fyList.includes(currentSelection)) {
+            selDash.value = currentSelection;
+            selData.value = currentSelection;
+        } else {
+            selDash.value = fyList[0];
+            selData.value = fyList[0];
+        }
+
+        // Listeners to keep them in sync
         selDash.onchange = () => {
-            loadScopedData(selDash.value);
-            // Sync the other dropdown
             selData.value = selDash.value;
+            loadScopedData(selDash.value);
         };
 
-        // Add Listener: When Data dropdown changes, FETCH new data
         selData.onchange = () => {
+            selDash.value = selData.value;
             loadScopedData(selData.value);
-            selDash.value = selData.value; // Sync Dashboard
         };
     }
     
@@ -703,11 +711,27 @@
         }
         return { rate: 0, isEx: false };
     }
+    // --- FIX B: UPDATED SWITCH TAB (Refreshes Data on Click) ---
     window.switchTab = (tab) => {
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        // 1. Toggle UI
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); 
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        
         document.getElementById(`tab-${tab}`).classList.add('active');
-        let btnId = 'tabBtnVisuals'; if(tab === 'data') btnId = 'tabBtnData'; if(tab === 'settings') btnId = 'tabBtnSet';
+        let btnId = 'tabBtnVisuals'; 
+        if(tab === 'data') btnId = 'tabBtnData'; 
+        if(tab === 'settings') btnId = 'tabBtnSet';
         document.getElementById(btnId).classList.add('active');
+
+        // 2. Force Refresh if entering Data Tab
+        if (tab === 'data') {
+            // Ensure filters match the loaded data
+            const activeFY = document.getElementById('fyDropdown').value;
+            document.getElementById('dataFyFilter').value = activeFY;
+            
+            // Re-run the filter logic to populate the table
+            document.getElementById('applyFilters').click();
+        }
     };
     function renderDoctorList() {
         const doctors = [...new Set(allRecords.map(r => r.doctorName))].sort();
