@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V5.3</title>
+    <title>SA Eye Specialists Portal - V5.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
@@ -206,7 +206,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V5.3</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V5.4</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -385,7 +385,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 5.3</span>
+            <span>Build Version: 5.4</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -1113,17 +1113,31 @@
     
     // 1. Initialize the Table (with optional config)
     function initPivotTable(configToLoad = null) {
-        // 1. Check for Data
+        // 1. Safety Check
         if(!allRecords || allRecords.length === 0) {
-            document.getElementById('pivotOutput').innerHTML = '<p>No data available to analyze.</p>';
+            // If the div exists, show a message
+            const existingDiv = document.getElementById('pivotOutput');
+            if(existingDiv) existingDiv.innerHTML = '<p>No data available to analyze.</p>';
             return;
         }
 
-        // 2. THE FIX: Wipe the slate clean!
-        // This forces the library to build a fresh table with the new settings
-        document.getElementById('pivotOutput').innerHTML = '<div style="padding:40px; text-align:center; color:#999;">Building Analysis...</div>';
+        // 2. THE NUCLEAR RESET: Destroy the old container completely
+        // This removes all "sticky" connections from the library
+        const parentTab = document.getElementById('tab-analysis');
+        const oldDiv = document.getElementById('pivotOutput');
+        if (oldDiv) oldDiv.remove();
 
-        // 3. Prepare Data
+        // 3. Create a fresh, clean container
+        const newDiv = document.createElement('div');
+        newDiv.id = 'pivotOutput';
+        newDiv.style.overflowX = 'auto';
+        newDiv.style.minHeight = '500px';
+        newDiv.innerHTML = '<div style="padding:40px; text-align:center; color:#999;">Building Analysis...</div>';
+        
+        // Append it to the tab (it will go to the bottom, below the controls)
+        parentTab.appendChild(newDiv);
+
+        // 4. Prepare Data
         const pivotData = allRecords.map(r => {
             const {rate} = getRate(r.doctorName, r.jsDate);
             return {
@@ -1139,7 +1153,7 @@
             };
         });
 
-        // 4. Set Default Config
+        // 5. Set Config
         let options = {
             rows: ["Doctor"],
             cols: ["Month"],
@@ -1149,14 +1163,13 @@
             renderers: $.pivotUtilities.renderers
         };
 
-        // 5. Merge Saved Config (if any)
+        // Merge Saved Config if we have one
         if (configToLoad) {
-            // We use a safe merge to ensure we don't lose the renderers
             options = { ...options, ...configToLoad };
         }
 
-        // 6. Draw the Table
-        $("#pivotOutput").pivotUI(pivotData, options);
+        // 6. Draw the Table (with the 'overwrite' flag set to true)
+        $("#pivotOutput").pivotUI(pivotData, options, true);
     }
 
     // 2. Save Logic
