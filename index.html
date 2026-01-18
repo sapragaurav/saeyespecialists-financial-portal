@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.9</title>
+    <title>SA Eye Specialists Portal - V4.10</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -133,7 +133,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.9</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.10</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -280,7 +280,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.9</span>
+            <span>Build Version: 4.10</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -773,6 +773,26 @@
         }
     };
 
+    // --- SMART SEARCH (DEBOUNCE) ---
+    let debounceTimer;
+    
+    // Function that runs when you type
+    function onSearchInput() {
+        // Clear the previous timer (if you are still typing)
+        clearTimeout(debounceTimer);
+        
+        // Set a new timer for 0.3 seconds
+        debounceTimer = setTimeout(() => {
+            // "Click" the apply button for the user automatically
+            document.getElementById('applyFilters').click();
+        }, 300);
+    }
+
+    // Attach this logic to the Doctor Filter box
+    document.getElementById('doctorFilter').addEventListener('input', onSearchInput);
+    // Attach to Month Filter too (so selecting a month updates instantly)
+    document.getElementById('monthFilter').addEventListener('change', () => document.getElementById('applyFilters').click());
+    
     document.getElementById('applyFilters').onclick = () => {
         const fy = document.getElementById('dataFyFilter').value;
         const m = document.getElementById('monthFilter').value;
@@ -791,20 +811,44 @@
         renderDashboard(allRecords);
     };
     function renderDashboard(data) {
-        const tbody = document.getElementById('recordsTableBody'); tbody.innerHTML = "";
+        const tbody = document.getElementById('recordsTableBody');
+        
+        // 1. Calculations Variables
         let tRec=0, tFee=0, tGST=0, tRem=0;
         
-        data.sort((a,b) => b.jsDate - a.jsDate).forEach(d => {
+        // 2. Build the HTML String (The "Brick Pile" method)
+        // We use .map() to create a list of strings, then .join('') to make one big string
+        const rowsHTML = data.sort((a,b) => b.jsDate - a.jsDate).map(d => {
             const valReceived = d.AmountReceived || 0; 
             const {rate, isEx} = getRate(d.doctorName, d.jsDate);
             const fee = valReceived * (rate / 100); 
             const gst = fee * 0.10; 
             const remit = valReceived - (fee + gst);
+            
+            // Add to totals
             tRec += valReceived; tFee += fee; tGST += gst; tRem += remit;
-            const badge = isEx ? `<span style="background:#fff3cd; color:#856404; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}% (Ex)</span>` : `<span style="background:#e7f1ff; color:#0056b3; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}%</span>`;
-            tbody.innerHTML += `<tr><td>${d.reportDate}</td><td style="font-weight:600;">${d.doctorName}</td><td>${d.location}</td><td class="money-col">${formatCurr(valReceived)}</td><td style="text-align:center;">${badge}</td><td class="money-col">${formatCurr(fee)}</td><td class="money-col">${formatCurr(gst)}</td><td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td><td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Del</button></td></tr>`;
-        });
+            
+            const badge = isEx ? 
+                `<span style="background:#fff3cd; color:#856404; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}% (Ex)</span>` : 
+                `<span style="background:#e7f1ff; color:#0056b3; padding:2px 6px; border-radius:4px; font-size:11px;">${rate}%</span>`;
+            
+            return `<tr>
+                <td>${d.reportDate}</td>
+                <td style="font-weight:600;">${d.doctorName}</td>
+                <td>${d.location}</td>
+                <td class="money-col">${formatCurr(valReceived)}</td>
+                <td style="text-align:center;">${badge}</td>
+                <td class="money-col">${formatCurr(fee)}</td>
+                <td class="money-col">${formatCurr(gst)}</td>
+                <td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td>
+                <td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Del</button></td>
+            </tr>`;
+        }).join(''); // <--- Takes all rows and joins them into one text block
+
+        // 3. Inject HTML into the page exactly ONE time (Fast!)
+        tbody.innerHTML = rowsHTML;
         
+        // 4. Update Footer Totals
         document.getElementById('totalReceived').innerText = formatCurr(tRec); 
         document.getElementById('totalFee').innerText = formatCurr(tFee);
         document.getElementById('totalGST').innerText = formatCurr(tGST); 
