@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.10</title>
+    <title>SA Eye Specialists Portal - V4.11</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -114,6 +114,27 @@
             border-top: 2px solid #0056b3; /* Adds a nice blue line to separate it */
             box-shadow: 0 -2px 4px rgba(0,0,0,0.1); /* Adds a shadow pointing up */
         }
+
+        /* 5. Custom Modal Styling */
+        .modal-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); z-index: 2000; 
+            display: none; align-items: center; justify-content: center; 
+        }
+        .modal-box { 
+            background: white; padding: 25px; border-radius: 12px; 
+            width: 90%; max-width: 400px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
+            text-align: center; animation: popIn 0.2s ease-out;
+        }
+        .modal-title { margin-top: 0; color: #0056b3; font-size: 18px; margin-bottom: 10px; }
+        .modal-msg { margin: 0 0 25px; color: #555; font-size: 14px; line-height: 1.5; }
+        .modal-actions { display: flex; gap: 10px; justify-content: center; }
+        
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
         
         @keyframes shimmer {
             0% { background-position: 200% 0; }
@@ -133,7 +154,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.10</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.11</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -280,12 +301,21 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.10</span>
+            <span>Build Version: 4.11</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
 </div>
 
+<div id="customModal" class="modal-overlay">
+    <div class="modal-box">
+        <h3 id="modalTitle" class="modal-title">Alert</h3>
+        <p id="modalMsg" class="modal-msg">Message goes here.</p>
+        <div id="modalActions" class="modal-actions">
+            </div>
+    </div>
+</div>
+    
 <script>
     // --- 1. CONFIG & UTILS (Placed at top to prevent 'not defined' errors) ---
     const firebaseConfig = {
@@ -306,6 +336,44 @@
     let currentEditingDoc = "";
     const DOCTOR_COLORS = ['#0056b3', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14', '#20c997', '#e83e8c', '#6f42c1'];
 
+    // --- MODAL CONTROLLERS ---
+    let pendingDeleteId = null; // Store ID to delete temporarily
+
+    function closeModal() {
+        document.getElementById('customModal').style.display = 'none';
+    }
+
+    function showCustomAlert(title, message) {
+        document.getElementById('modalTitle').innerText = title;
+        document.getElementById('modalMsg').innerText = message;
+        document.getElementById('modalActions').innerHTML = 
+            `<button class="btn btn-primary" onclick="closeModal()" style="min-width: 80px;">OK</button>`;
+        document.getElementById('customModal').style.display = 'flex';
+    }
+
+    function askDeleteConfirmation(id) {
+        pendingDeleteId = id;
+        document.getElementById('modalTitle').innerText = "Confirm Deletion";
+        document.getElementById('modalMsg').innerText = "Are you sure you want to permanently delete this record? This cannot be undone.";
+        document.getElementById('modalActions').innerHTML = 
+            `<button class="btn" style="background:#e9ecef; color:#495057;" onclick="closeModal()">Cancel</button>
+             <button class="btn btn-danger" onclick="confirmDeleteAction()">Yes, Delete</button>`;
+        document.getElementById('customModal').style.display = 'flex';
+    }
+
+    async function confirmDeleteAction() {
+        if(!pendingDeleteId) return;
+        closeModal();
+        try {
+            await db.collection("daily_reports").doc(pendingDeleteId).delete();
+            const activeFY = document.getElementById('fyDropdown').value;
+            loadScopedData(activeFY);
+        } catch(e) {
+            showCustomAlert("Error", "Could not delete: " + e.message);
+        }
+        pendingDeleteId = null;
+    }
+    
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
     const parseDate = (str) => { 
         if(!str) return new Date(0); 
@@ -332,8 +400,10 @@
         months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
     }
 
+    
+    
     // --- 2. AUTH ---
-    const loginFunc = () => auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(e => alert(e.message));
+    const loginFunc = () => auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(e => showCustomAlert("Login Failed", e.message));
     document.getElementById('loginBtn').onclick = loginFunc;
     document.getElementById('password').addEventListener("keypress", (e) => { if(e.key === "Enter") loginFunc(); });
     window.logout = () => auth.signOut().then(() => location.reload());
@@ -562,7 +632,7 @@
         
         // 1. Validation: Ensure a doctor is selected
         if(!docName) { 
-            alert("Please filter by a specific Doctor first using the 'Search Doctor' box."); 
+            showCustomAlert("Action Required", "Please filter by a specific Doctor first using the 'Search Doctor' box."); 
             return; 
         }
         
@@ -575,7 +645,7 @@
         });
 
         if(pdfData.length === 0) {
-            alert("No records found for this doctor in the selected period.");
+            showCustomAlert("No Data", "No records found for this doctor in the selected period.");
             return;
         }
 
@@ -841,7 +911,7 @@
                 <td class="money-col">${formatCurr(fee)}</td>
                 <td class="money-col">${formatCurr(gst)}</td>
                 <td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td>
-                <td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="deleteRecord('${d.id}')">Del</button></td>
+                <td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="askDeleteConfirmation('${d.id}')">Del</button></td>
             </tr>`;
         }).join(''); // <--- Takes all rows and joins them into one text block
 
@@ -922,7 +992,7 @@
             const activeFY = document.getElementById('fyDropdown').value; loadScopedData(activeFY);
         } catch (e) { document.getElementById('saveStatus').innerText = "Error: " + e.message; }
     };
-    window.deleteRecord = async (id) => { if(confirm("Delete?")) { await db.collection("daily_reports").doc(id).delete(); const activeFY = document.getElementById('fyDropdown').value; loadScopedData(activeFY); }};
+    
 </script>
 </body>
 </html>
