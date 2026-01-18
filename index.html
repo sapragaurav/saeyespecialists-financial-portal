@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.7</title>
+    <title>SA Eye Specialists Portal - V4.8</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -91,6 +91,20 @@
             display: block;
         }
 
+        /* 3. Table Wrapper Fix for Sticky Header */
+        .table-wrapper {
+            max-height: 65vh;  /* Limits height so the table scrolls internally */
+            overflow: auto;    /* Handles both Horizontal and Vertical scroll */
+            border: 1px solid #ddd;
+            position: relative;
+        }
+        
+        /* Ensure the sticky header has a solid background so text doesn't overlap */
+        th {
+            background-color: #f1f3f5; 
+            /* We already added position: sticky in the previous step, so that applies here */
+        }
+        
         @keyframes shimmer {
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
@@ -109,7 +123,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.7</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.8</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -194,7 +208,7 @@
             
             <p id="uploadStatus" style="text-align:center; font-size:13px; font-weight:bold; height:20px;"></p>
 
-            <div style="overflow-x:auto;">
+            <div class="table-wrapper">
                 <table id="dataTableElement">
                     <thead>
                         <tr>
@@ -256,7 +270,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.7</span>
+            <span>Build Version: 4.8</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
