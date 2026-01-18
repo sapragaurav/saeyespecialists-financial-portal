@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V5.2</title>
+    <title>SA Eye Specialists Portal - V5.3</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
@@ -206,7 +206,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V5.2</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V5.3</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -385,7 +385,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 5.2</span>
+            <span>Build Version: 5.3</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -1113,12 +1113,17 @@
     
     // 1. Initialize the Table (with optional config)
     function initPivotTable(configToLoad = null) {
+        // 1. Check for Data
         if(!allRecords || allRecords.length === 0) {
             document.getElementById('pivotOutput').innerHTML = '<p>No data available to analyze.</p>';
             return;
         }
 
-        // Prepare Data
+        // 2. THE FIX: Wipe the slate clean!
+        // This forces the library to build a fresh table with the new settings
+        document.getElementById('pivotOutput').innerHTML = '<div style="padding:40px; text-align:center; color:#999;">Building Analysis...</div>';
+
+        // 3. Prepare Data
         const pivotData = allRecords.map(r => {
             const {rate} = getRate(r.doctorName, r.jsDate);
             return {
@@ -1134,7 +1139,7 @@
             };
         });
 
-        // Default Config (if nothing loaded)
+        // 4. Set Default Config
         let options = {
             rows: ["Doctor"],
             cols: ["Month"],
@@ -1144,12 +1149,13 @@
             renderers: $.pivotUtilities.renderers
         };
 
-        // If loading a saved report, merge its settings
+        // 5. Merge Saved Config (if any)
         if (configToLoad) {
+            // We use a safe merge to ensure we don't lose the renderers
             options = { ...options, ...configToLoad };
         }
 
-        // Render Pivot Table
+        // 6. Draw the Table
         $("#pivotOutput").pivotUI(pivotData, options);
     }
 
