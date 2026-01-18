@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V5.0</title>
+    <title>SA Eye Specialists Portal - V5.2</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
@@ -161,6 +161,36 @@
         .control-group { flex: 1; min-width: 250px; }
         .control-label { font-weight: bold; font-size: 12px; display: block; margin-bottom: 5px; color: #555; }
         .control-input { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+
+        /* 7. Pivot Table Visual Tweaks */
+        
+        /* The Left Column (Unused Fields) */
+        td.pvtUnused {
+            min-width: 150px !important; /* Forces it to be smaller */
+            max-width: 150px !important;
+            width: 150px !important;
+            overflow: hidden;
+        }
+
+        /* The Middle Column (Row Labels) */
+        td.pvtAxisContainer, td.pvtVals {
+            min-width: 150px !important; 
+            max-width: 200px !important;
+        }
+        
+        /* Make the list of fields look cleaner */
+        li.ui-sortable-handle {
+            font-size: 12px !important;
+            padding: 5px !important;
+            border-radius: 4px;
+            background: #f8f9fa;
+        }
+        
+        /* General Font Sizing for the table */
+        table.pvtTable {
+            font-size: 12px;
+        }
+
         
     </style>
 </head>
@@ -176,7 +206,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V5.0</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V5.2</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -185,9 +215,9 @@
                 <img src="logo.png" class="header-logo" alt="Logo">
                 <div class="tabs-area">
                     <button class="tab-btn active" id="tabBtnVisuals" onclick="switchTab('visuals')">Financial Dashboard</button>
+                    <button class="tab-btn" id="tabBtnAnalysis" onclick="switchTab('analysis')">Financial Analysis</button>                 
                     <button class="tab-btn" id="tabBtnData" onclick="switchTab('data')">Financial Data</button>
-                    <button class="tab-btn" id="tabBtnSet" onclick="switchTab('settings')">Doctor Settings (Fees)</button>
-                    <button class="tab-btn" id="tabBtnAnalysis" onclick="switchTab('analysis')">Financial Analysis</button>
+                    <button class="tab-btn" id="tabBtnSet" onclick="switchTab('settings')">Doctor Settings (Fees)</button>                    
                 </div>
             </div>
             <div class="user-area">
@@ -355,7 +385,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 5.0</span>
+            <span>Build Version: 5.2</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -1008,17 +1038,15 @@
         document.getElementById(`tab-${tab}`).classList.add('active');
         
         // 3. Highlight the correct header button
-        let btnId = 'tabBtnVisuals'; 
+        let btnId = 'tabBtnVisuals'; // Default
         if(tab === 'data') btnId = 'tabBtnData'; 
         if(tab === 'settings') btnId = 'tabBtnSet';
-        if (tab === 'analysis') {
-            initPivotTable(); 
-            loadSavedReportsList(); // <--- Add this line to load the dropdown
-        }
+        if(tab === 'analysis') btnId = 'tabBtnAnalysis'; 
         
-        document.getElementById(btnId).classList.add('active');
+        const btn = document.getElementById(btnId);
+        if(btn) btn.classList.add('active'); // Safety check added
         
-        // 4. Special logic for specific tabs
+        // 4. Run Tab Specific Logic
         if (tab === 'data') {
             const activeFY = document.getElementById('fyDropdown').value;
             if(document.getElementById('dataFyFilter')) {
@@ -1027,9 +1055,11 @@
             }
         }
         
-        // 5. NEW: Initialize Pivot Table when entering Analysis tab
         if (tab === 'analysis') {
-            initPivotTable();
+            // Only init table if it hasn't been drawn yet, or just to refresh data
+            initPivotTable(); 
+            // We ONLY load the list here, when entering the tab
+            loadSavedReportsList(); 
         }
     };
     
@@ -1121,9 +1151,6 @@
 
         // Render Pivot Table
         $("#pivotOutput").pivotUI(pivotData, options);
-        
-        // Refresh the dropdown list just in case
-        loadSavedReportsList(); 
     }
 
     // 2. Save Logic
