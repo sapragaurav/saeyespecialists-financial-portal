@@ -951,14 +951,30 @@
         return { rate: 0, isEx: false };
     }
     window.switchTab = (tab) => {
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        // 1. Hide all tabs, deactivate all buttons
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); 
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        
+        // 2. Show the specific tab requested
         document.getElementById(`tab-${tab}`).classList.add('active');
-        let btnId = 'tabBtnVisuals'; if(tab === 'data') btnId = 'tabBtnData'; if(tab === 'settings') btnId = 'tabBtnSet';
+        
+        // 3. Highlight the correct header button
+        let btnId = 'tabBtnVisuals'; 
+        if(tab === 'data') btnId = 'tabBtnData'; 
+        if(tab === 'settings') btnId = 'tabBtnSet';
         document.getElementById(btnId).classList.add('active');
+        
+        // 4. FIX IS HERE: If switching to Data tab, run logic directly (no click)
         if (tab === 'data') {
             const activeFY = document.getElementById('fyDropdown').value;
-            document.getElementById('dataFyFilter').value = activeFY;
-            document.getElementById('applyFilters').click();
+            // Ensure the data tab filter matches the dashboard year
+            if(document.getElementById('dataFyFilter')) {
+                document.getElementById('dataFyFilter').value = activeFY;
+                // Run the new logic function directly!
+                if(typeof runFilterLogic === 'function') {
+                    runFilterLogic(); 
+                }
+            }
         }
     };
     function renderDoctorList() {
