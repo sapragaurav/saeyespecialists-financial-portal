@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.12</title>
+    <title>SA Eye Specialists Portal - V4.13</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -154,7 +154,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.12</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.13</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -306,7 +306,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.12</span>
+            <span>Build Version: 4.13</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -485,12 +485,13 @@
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
             
             populateMonthDropdown();
-            populateDoctorFilterDropdown();
+            populateDoctorFilterDropdown();            
             renderVisuals();
-            renderDoctorList(); // Fixes Bug 3 (Empty Doctor List)
+            renderDoctorList();
             
+            // IF the user is on the Data tab, run the filter immediately
             if (document.getElementById('tab-data').classList.contains('active')) {
-                document.getElementById('applyFilters').click();
+                runFilterLogic(); // <--- THIS is likely missing or still says .click()
             }
             
         } catch (e) { 
@@ -865,17 +866,17 @@
     };
 
     // --- FILTERING LOGIC ---
-    
-    // The main function that does the work (formerly the "Apply" button)
     function runFilterLogic() {
         const fy = document.getElementById('dataFyFilter').value;
         const m = document.getElementById('monthFilter').value;
-        const doc = document.getElementById('doctorFilter').value; // Now a dropdown value
+        const doc = document.getElementById('doctorFilter').value; 
         
+        // Safety check: If allRecords is empty, stop.
+        if(!allRecords) return; 
+
         const filtered = allRecords.filter(r => {
             const matchFY = !fy || getFinancialYear(r.jsDate) === fy;
             const matchM = !m || r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }) === m;
-            // Exact match now, since it is a dropdown
             const matchDoc = !doc || r.doctorName === doc;
             return matchFY && matchM && matchDoc;
         });
@@ -898,20 +899,21 @@
     
     function renderDashboard(data) {
         const tbody = document.getElementById('recordsTableBody');
-        
-        // 1. Calculations Variables
+        // Clear table if no data
+        if(!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">No records found.</td></tr>';
+            ['totalReceived', 'totalFee', 'totalGST', 'totalRemit'].forEach(id => document.getElementById(id).innerText = '$0.00');
+            return;
+        }
+
         let tRec=0, tFee=0, tGST=0, tRem=0;
         
-        // 2. Build the HTML String (The "Brick Pile" method)
-        // We use .map() to create a list of strings, then .join('') to make one big string
         const rowsHTML = data.sort((a,b) => b.jsDate - a.jsDate).map(d => {
             const valReceived = d.AmountReceived || 0; 
             const {rate, isEx} = getRate(d.doctorName, d.jsDate);
             const fee = valReceived * (rate / 100); 
             const gst = fee * 0.10; 
             const remit = valReceived - (fee + gst);
-            
-            // Add to totals
             tRec += valReceived; tFee += fee; tGST += gst; tRem += remit;
             
             const badge = isEx ? 
@@ -929,12 +931,9 @@
                 <td class="money-col" style="color:#28a745;">${formatCurr(remit)}</td>
                 <td style="text-align:center;"><button class="btn btn-danger" style="font-size:10px;" onclick="askDeleteConfirmation('${d.id}')">Del</button></td>
             </tr>`;
-        }).join(''); // <--- Takes all rows and joins them into one text block
+        }).join('');
 
-        // 3. Inject HTML into the page exactly ONE time (Fast!)
         tbody.innerHTML = rowsHTML;
-        
-        // 4. Update Footer Totals
         document.getElementById('totalReceived').innerText = formatCurr(tRec); 
         document.getElementById('totalFee').innerText = formatCurr(tFee);
         document.getElementById('totalGST').innerText = formatCurr(tGST); 
