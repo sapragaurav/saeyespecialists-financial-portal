@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.4</title>
+    <title>SA Eye Specialists Portal - V4.5</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.4</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.5</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -231,13 +231,14 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.4</span>
+            <span>Build Version: 4.5</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
 </div>
 
 <script>
+    // --- 1. CONFIG & UTILS (Placed at top to prevent 'not defined' errors) ---
     const firebaseConfig = {
         apiKey: "AIzaSyAsCKNyHipM5kUKKqJ_klJ1J1l20E4iQ-k",
         authDomain: "saeyespecialists-portal.firebaseapp.com",
@@ -257,7 +258,6 @@
     const DOCTOR_COLORS = ['#0056b3', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6610f2', '#fd7e14', '#20c997', '#e83e8c', '#6f42c1'];
 
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
-    // Robust Date Parser
     const parseDate = (str) => { 
         if(!str) return new Date(0); 
         const [d,m,y] = str.split('/'); 
@@ -269,6 +269,21 @@
         return `FY${startY.toString().substr(2)}/${(startY + 1).toString().substr(2)}`;
     };
 
+    // Helper: Populates Month Dropdown
+    function populateMonthDropdown() {
+        const selectedFY = document.getElementById('dataFyFilter').value;
+        const sel = document.getElementById('monthFilter');
+        let relevantRecords = allRecords;
+        if (selectedFY && selectedFY !== "No Data") {
+            relevantRecords = allRecords.filter(r => getFinancialYear(r.jsDate) === selectedFY);
+        }
+        const months = [...new Set(relevantRecords.map(r => r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' })))];
+        months.sort((a,b) => new Date(b) - new Date(a));
+        sel.innerHTML = '<option value="">-- All Months --</option>';
+        months.forEach(m => sel.innerHTML += `<option value="${m}">${m}</option>`);
+    }
+
+    // --- 2. AUTH ---
     const loginFunc = () => auth.signInWithEmailAndPassword(document.getElementById('email').value, document.getElementById('password').value).catch(e => alert(e.message));
     document.getElementById('loginBtn').onclick = loginFunc;
     document.getElementById('password').addEventListener("keypress", (e) => { if(e.key === "Enter") loginFunc(); });
@@ -283,6 +298,7 @@
         }
     });
     
+    // --- 3. DATA LOADER ---
     async function loadScopedData(targetFY) {
         document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
         
@@ -302,6 +318,17 @@
                 }
             });
 
+            // Initialize Dropdowns FIRST based on what we found in settings
+            initFYDropdowns(targetFY, dynamicYears); 
+
+            // If the DB says "No Data" (dynamicYears is empty), stop here.
+            // This fixes Bug 1 (Showing default year when empty)
+            if (dynamicYears.length === 0) {
+                document.getElementById('dbStatus').innerText = `Status: Ready (No Data)`;
+                return; 
+            }
+
+            // Only Query if we have valid years
             const rSnap = await db.collection("daily_reports")
                 .where('dateISO', '>=', startDate)
                 .where('dateISO', '<=', endDate)
@@ -317,12 +344,10 @@
 
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
             
-            initFYDropdowns(targetFY, dynamicYears); 
             populateMonthDropdown();
             renderVisuals();
-            renderDoctorList();
+            renderDoctorList(); // Fixes Bug 3 (Empty Doctor List)
             
-            // Force table refresh if active
             if (document.getElementById('tab-data').classList.contains('active')) {
                 document.getElementById('applyFilters').click();
             }
@@ -337,13 +362,15 @@
         const selDash = document.getElementById('fyDropdown'); 
         const selData = document.getElementById('dataFyFilter');
         
-        let fyList = [];
-        if (availableYears.length > 0) {
-            fyList = availableYears.sort().reverse();
-        } else {
-            fyList.push(activeFY); // Only show requested if nothing else
+        // Strict Logic: If no years in DB, show "No Data"
+        if (availableYears.length === 0) {
+            selDash.innerHTML = "<option>No Data</option>";
+            selData.innerHTML = "<option>No Data</option>";
+            return;
         }
-        if(!fyList.includes(activeFY)) fyList.unshift(activeFY);
+
+        let fyList = availableYears.sort().reverse();
+        if(!fyList.includes(activeFY) && activeFY !== "No Data") fyList.unshift(activeFY);
         fyList = [...new Set(fyList)];
 
         selDash.innerHTML = "";
@@ -367,13 +394,97 @@
         };
     }
 
+    // --- 4. EXCEL UPLOAD ---
+    const EXCEL_COLS = [
+        "Amount Billed", "Cash Received", "EFTPOS Received", "Credit Card Received", 
+        "Extras Cover Received", "Bank Transfer Received", "Cheque Received", 
+        "Deposit Applied", "Bulk Bill Received", "DVA Received", "ECLIPSE Received", 
+        "90 Day Gap Received", "Amount Received"
+    ];
+
+    document.getElementById('excelFile').onchange = function() {
+        const status = document.getElementById('uploadStatus');
+        status.style.color = "blue";
+        status.innerText = "Processing...";
+        const reader = new FileReader();
+        
+        reader.onload = async function(e) {
+            try {
+                const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+                
+                let date = "", hIdx = -1;
+                for(let i=0; i<Math.min(rows.length, 25); i++){
+                    const txt = (rows[i]||[]).join(" ");
+                    if(txt.includes("Period")){ const m = txt.match(/\d{1,2}\/\d{1,2}\/\d{4}/g); if(m) date=m[0]; }
+                    if((rows[i]||[]).includes("Doctor")) hIdx=i;
+                }
+
+                if(!date) throw new Error("Could not find 'Period:' date in file.");
+
+                const [d, m, y] = date.split('/');
+                const dateISO = `${y}-${m}-${d}`;
+                const fileDate = new Date(`${y}-${m}-${d}`);
+                const fileFY = getFinancialYear(fileDate);
+
+                const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx });
+                const batch = db.batch();
+                let count = 0;
+
+                for(const r of json){
+                    const keys = Object.keys(r);
+                    const findKey = (name) => keys.find(k => k.trim().toLowerCase() === name.toLowerCase());
+                    const doc = (r[findKey('Doctor')]||"").toString().trim();
+                    
+                    if(doc && !doc.includes("Total:")){
+                        const loc = r[findKey('Location')]||"N/A";
+                        const id = `${date}_${doc}_${loc}`.replace(/\//g,'-').replace(/\s+/g,'_');
+                        
+                        let dataObj = {
+                            reportDate: date,
+                            dateISO: dateISO,
+                            doctorName: doc,
+                            location: loc,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                        };
+
+                        EXCEL_COLS.forEach(colName => {
+                            const val = r[findKey(colName)];
+                            dataObj[colName.replace(/\s+/g, '')] = parseFloat(val) || 0; 
+                        });
+
+                        batch.set(db.collection("daily_reports").doc(id), dataObj, {merge:true});
+                        count++;
+                    }
+                }
+                
+                const metaRef = db.collection("doctor_settings").doc("meta_years");
+                batch.set(metaRef, { 
+                    list: firebase.firestore.FieldValue.arrayUnion(fileFY) 
+                }, { merge: true });
+
+                await batch.commit();
+                status.style.color = "green";
+                status.innerText = `✔ Saved ${count} records (${fileFY})`;
+                
+                setTimeout(() => loadScopedData(fileFY), 1000); 
+                
+            } catch(e) {
+                status.style.color = "red";
+                status.innerText = "Error: " + e.message;
+                console.error(e);
+            }
+        };
+        reader.readAsArrayBuffer(this.files[0]);
+    };
+
+    // --- 5. UI & LOGIC ---
     window.generatePDF = function() {
         const docName = document.getElementById('doctorFilter').value;
         const monthFilter = document.getElementById('monthFilter').value;
         const fyFilter = document.getElementById('dataFyFilter').value;
         if(!docName) { alert("Please filter by a specific Doctor first."); return; }
         
-        // Use the same filter logic as the table
         const pdfData = allRecords.filter(r => {
             const matchFY = !fyFilter || getFinancialYear(r.jsDate) === fyFilter;
             const matchM = !monthFilter || r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }) === monthFilter;
@@ -663,48 +774,6 @@
             document.getElementById('saveStatus').style.color = "green";
             const activeFY = document.getElementById('fyDropdown').value; loadScopedData(activeFY);
         } catch (e) { document.getElementById('saveStatus').innerText = "Error: " + e.message; }
-    };
-    const EXCEL_COLS = [ "Amount Billed", "Cash Received", "EFTPOS Received", "Credit Card Received", "Extras Cover Received", "Bank Transfer Received", "Cheque Received", "Deposit Applied", "Bulk Bill Received", "DVA Received", "ECLIPSE Received", "90 Day Gap Received", "Amount Received" ];
-
-    document.getElementById('excelFile').onchange = function() {
-        const status = document.getElementById('uploadStatus');
-        status.style.color = "blue"; status.innerText = "Processing...";
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            try {
-                const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-                const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-                let date = "", hIdx = -1;
-                for(let i=0; i<Math.min(rows.length, 25); i++){
-                    const txt = (rows[i]||[]).join(" ");
-                    if(txt.includes("Period")){ const m = txt.match(/\d{1,2}\/\d{1,2}\/\d{4}/g); if(m) date=m[0]; }
-                    if((rows[i]||[]).includes("Doctor")) hIdx=i;
-                }
-                if(!date) throw new Error("Could not find 'Period:' date in file.");
-                const [d, m, y] = date.split('/'); const dateISO = `${y}-${m}-${d}`;
-                const fileDate = new Date(`${y}-${m}-${d}`); const fileFY = getFinancialYear(fileDate);
-                const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx });
-                const batch = db.batch(); let count = 0;
-                for(const r of json){
-                    const keys = Object.keys(r);
-                    const findKey = (name) => keys.find(k => k.trim().toLowerCase() === name.toLowerCase());
-                    const doc = (r[findKey('Doctor')]||"").toString().trim();
-                    if(doc && !doc.includes("Total:")){
-                        const loc = r[findKey('Location')]||"N/A";
-                        const id = `${date}_${doc}_${loc}`.replace(/\//g,'-').replace(/\s+/g,'_');
-                        let dataObj = { reportDate: date, dateISO: dateISO, doctorName: doc, location: loc, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() };
-                        EXCEL_COLS.forEach(colName => { const val = r[findKey(colName)]; dataObj[colName.replace(/\s+/g, '')] = parseFloat(val) || 0; });
-                        batch.set(db.collection("daily_reports").doc(id), dataObj, {merge:true}); count++;
-                    }
-                }
-                const metaRef = db.collection("doctor_settings").doc("meta_years");
-                batch.set(metaRef, { list: firebase.firestore.FieldValue.arrayUnion(fileFY) }, { merge: true });
-                await batch.commit();
-                status.style.color = "green"; status.innerText = `✔ Saved ${count} records (${fileFY})`;
-                setTimeout(() => loadScopedData(fileFY), 1000);
-            } catch(e) { status.style.color = "red"; status.innerText = "Error: " + e.message; console.error(e); }
-        };
-        reader.readAsArrayBuffer(this.files[0]);
     };
     window.deleteRecord = async (id) => { if(confirm("Delete?")) { await db.collection("daily_reports").doc(id).delete(); const activeFY = document.getElementById('fyDropdown').value; loadScopedData(activeFY); }};
 </script>
