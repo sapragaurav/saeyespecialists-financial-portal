@@ -145,6 +145,23 @@
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
         }
+
+        /* 6. Analysis Control Bar */
+        .analysis-controls {
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+            border: 1px solid #dee2e6; 
+            display: flex; 
+            gap: 20px; 
+            align-items: flex-end; 
+            flex-wrap: wrap;
+        }
+        .control-group { flex: 1; min-width: 250px; }
+        .control-label { font-weight: bold; font-size: 12px; display: block; margin-bottom: 5px; color: #555; }
+        .control-input { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        
     </style>
 </head>
 <body>
@@ -312,10 +329,25 @@
         </div>
 
         <div id="tab-analysis" class="tab-content">
-            <div style="background: #fff; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px;">
-                <h3 style="margin: 0; color: #0056b3;">Custom Report Builder</h3>
-                <p style="margin: 5px 0 0; color: #666; font-size: 13px;">Drag and drop fields to analyze your clinic's performance.</p>
+            <div class="analysis-controls">
+            <div class="control-group">
+                <label class="control-label">📂 Load Saved Analysis</label>
+                <select id="savedReportsDropdown" class="control-input" onchange="loadSelectedReport()">
+                    <option value="">-- Select a Report --</option>
+                    <option disabled>Loading...</option>
+                </select>
             </div>
+            
+            <div class="control-group" style="border-left: 1px solid #ddd; padding-left: 20px;">
+                <label class="control-label">💾 Save Current Analysis</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="newReportName" class="control-input" placeholder="Report Name (e.g. FY25 Revenue)">
+                    <button class="btn btn-green" onclick="saveCurrentReport()">Save</button>
+                </div>
+            </div>
+            
+            <button class="btn btn-danger" onclick="deleteSelectedReport()" style="height: 38px;">🗑️</button>
+        </div>
             
             <div id="pivotOutput" style="overflow-x: auto; min-height: 500px;">
                 <div style="padding: 40px; text-align: center; color: #999;">Loading Analysis Tools...</div>
@@ -979,7 +1011,10 @@
         let btnId = 'tabBtnVisuals'; 
         if(tab === 'data') btnId = 'tabBtnData'; 
         if(tab === 'settings') btnId = 'tabBtnSet';
-        if(tab === 'analysis') btnId = 'tabBtnAnalysis'; // <--- NEW LINE
+        if (tab === 'analysis') {
+            initPivotTable(); 
+            loadSavedReportsList(); // <--- Add this line to load the dropdown
+        }
         
         document.getElementById(btnId).classList.add('active');
         
@@ -1044,18 +1079,18 @@
             const activeFY = document.getElementById('fyDropdown').value; loadScopedData(activeFY);
         } catch (e) { document.getElementById('saveStatus').innerText = "Error: " + e.message; }
     };
-    // --- PIVOT TABLE LOGIC ---
-    function initPivotTable() {
+    // --- PIVOT TABLE & REPORTING LOGIC ---
+    
+    // 1. Initialize the Table (with optional config)
+    function initPivotTable(configToLoad = null) {
         if(!allRecords || allRecords.length === 0) {
             document.getElementById('pivotOutput').innerHTML = '<p>No data available to analyze.</p>';
             return;
         }
 
-        // 1. Prepare Data: Convert raw data into a clean list for the Pivot Tool
-        // We add "Financial Year" and "Month" as explicit fields to make grouping easier
+        // Prepare Data
         const pivotData = allRecords.map(r => {
             const {rate} = getRate(r.doctorName, r.jsDate);
-            const fee = (r.AmountReceived || 0) * (rate / 100);
             return {
                 Date: r.reportDate,
                 Month: r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }),
@@ -1063,22 +1098,107 @@
                 Doctor: r.doctorName,
                 Location: r.location,
                 "Total Billings": r.AmountReceived || 0,
-                "Practice Revenue": fee,
+                "Practice Revenue": (r.AmountReceived || 0) * (rate / 100),
                 "Cash Received": r.CashReceived || 0,
                 "EFTPOS Received": r.EFTPOSReceived || 0
             };
         });
 
-        // 2. Render the Pivot UI
-        // We use jQuery ($) here because the library requires it
-        $("#pivotOutput").pivotUI(pivotData, {
+        // Default Config (if nothing loaded)
+        let options = {
             rows: ["Doctor"],
             cols: ["Month"],
             vals: ["Total Billings"],
             aggregatorName: "Sum",
             rendererName: "Table Heatmap",
             renderers: $.pivotUtilities.renderers
-        });
+        };
+
+        // If loading a saved report, merge its settings
+        if (configToLoad) {
+            options = { ...options, ...configToLoad };
+        }
+
+        // Render Pivot Table
+        $("#pivotOutput").pivotUI(pivotData, options);
+        
+        // Refresh the dropdown list just in case
+        loadSavedReportsList(); 
+    }
+
+    // 2. Save Logic
+    async function saveCurrentReport() {
+        const name = document.getElementById('newReportName').value.trim();
+        if (!name) { showCustomAlert("Error", "Please enter a name for this report."); return; }
+
+        // Get current config from the library
+        const config = $("#pivotOutput").data("pivotUIOptions");
+        
+        // Extract ONLY what we need to save (we don't save the data itself, just the settings)
+        const settingsToSave = {
+            rows: config.rows,
+            cols: config.cols,
+            vals: config.vals,
+            aggregatorName: config.aggregatorName,
+            rendererName: config.rendererName,
+            inclusions: config.inclusions, // Saves checkbox filters
+            exclusions: config.exclusions  // Saves checkbox filters
+        };
+
+        try {
+            await db.collection("saved_reports").doc(name).set(settingsToSave);
+            document.getElementById('newReportName').value = ""; // Clear input
+            showCustomAlert("Success", "Report saved successfully!");
+            loadSavedReportsList(); // Refresh dropdown
+        } catch (e) {
+            showCustomAlert("Error", "Could not save: " + e.message);
+        }
+    }
+
+    // 3. Load List Logic (Populates Dropdown)
+    async function loadSavedReportsList() {
+        const sel = document.getElementById('savedReportsDropdown');
+        try {
+            const snap = await db.collection("saved_reports").get();
+            sel.innerHTML = '<option value="">-- Select a Report --</option>';
+            snap.forEach(doc => {
+                sel.innerHTML += `<option value="${doc.id}">${doc.id}</option>`;
+            });
+        } catch (e) {
+            console.error("Error loading reports", e);
+        }
+    }
+
+    // 4. Load Action (When user selects a report)
+    async function loadSelectedReport() {
+        const name = document.getElementById('savedReportsDropdown').value;
+        if (!name) return;
+
+        try {
+            const doc = await db.collection("saved_reports").doc(name).get();
+            if (doc.exists) {
+                // Re-initialize table with these settings
+                initPivotTable(doc.data());
+            }
+        } catch (e) {
+            showCustomAlert("Error", "Could not load report: " + e.message);
+        }
+    }
+
+    // 5. Delete Action
+    async function deleteSelectedReport() {
+        const name = document.getElementById('savedReportsDropdown').value;
+        if (!name) { showCustomAlert("Error", "Please select a report to delete."); return; }
+
+        if (confirm(`Are you sure you want to delete "${name}"?`)) {
+            try {
+                await db.collection("saved_reports").doc(name).delete();
+                loadSavedReportsList();
+                document.getElementById('savedReportsDropdown').value = "";
+            } catch (e) {
+                showCustomAlert("Error", "Could not delete: " + e.message);
+            }
+        }
     }
 </script>
 </body>
