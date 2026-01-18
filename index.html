@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.5</title>
+    <title>SA Eye Specialists Portal - V4.6</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -84,7 +84,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.5</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.6</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -231,7 +231,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.5</span>
+            <span>Build Version: 4.6</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -483,8 +483,14 @@
         const docName = document.getElementById('doctorFilter').value;
         const monthFilter = document.getElementById('monthFilter').value;
         const fyFilter = document.getElementById('dataFyFilter').value;
-        if(!docName) { alert("Please filter by a specific Doctor first."); return; }
         
+        // 1. Validation: Ensure a doctor is selected
+        if(!docName) { 
+            alert("Please filter by a specific Doctor first using the 'Search Doctor' box."); 
+            return; 
+        }
+        
+        // 2. Filter data for the PDF
         const pdfData = allRecords.filter(r => {
             const matchFY = !fyFilter || getFinancialYear(r.jsDate) === fyFilter;
             const matchM = !monthFilter || r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }) === monthFilter;
@@ -492,6 +498,12 @@
             return matchFY && matchM && matchDoc;
         });
 
+        if(pdfData.length === 0) {
+            alert("No records found for this doctor in the selected period.");
+            return;
+        }
+
+        // 3. Calculate Totals
         const cashKey = "CashReceived";
         const tyroKeys = [
             "EFTPOSReceived", "CreditCardReceived", "ExtrasCoverReceived", 
@@ -521,11 +533,17 @@
         const finalBalance = totalPayableToSAES - totalCash;
         const totalBillings = totalTyro + totalCash;
 
+        // 4. Generate PDF
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        const logoImg = document.getElementById('pdfLogoSource');
-        if (logoImg.complete) doc.addImage(logoImg, 'PNG', 15, 10, 40, 15);
         
+        // Add Logo
+        const logoImg = document.getElementById('pdfLogoSource');
+        if (logoImg.complete && logoImg.naturalHeight !== 0) {
+            doc.addImage(logoImg, 'PNG', 15, 10, 40, 15);
+        }
+        
+        // Header
         doc.setFontSize(16); doc.text("TAX INVOICE", 195, 20, { align: "right" });
         doc.setFontSize(10); doc.setTextColor(100);
         const reportPeriod = monthFilter ? monthFilter : (fyFilter || "All Time");
@@ -540,6 +558,7 @@
 
         doc.setFontSize(12); doc.setTextColor(0); doc.text(`To: ${docName}`, 15, 40);
         
+        // Summary Box
         doc.setFillColor(245, 245, 245); doc.rect(15, 60, 180, 30, 'F');
         doc.setFontSize(10);
         doc.text("Total Billings:", 20, 70);       doc.text(formatCurr(totalBillings), 65, 70, { align: "right" });
@@ -549,6 +568,7 @@
         doc.text("Balance Payable:", 100, 78);   doc.text(formatCurr(finalBalance), 160, 78, { align: "right" });
         doc.setFont(undefined, 'normal');
 
+        // Detailed Table
         doc.autoTable({
             html: '#dataTableElement', startY: 95, theme: 'striped', headStyles: { fillColor: [0, 86, 179] },
             columns: [ { header: 'Date', dataKey: 0 }, { header: 'Location', dataKey: 2 }, { header: 'Billings', dataKey: 3 }, { header: 'Prac Rev', dataKey: 5 }, { header: 'GST', dataKey: 6 }, { header: 'Remit', dataKey: 7 } ],
@@ -558,6 +578,7 @@
         let finalY = doc.lastAutoTable.finalY + 15;
         if (finalY > 200) { doc.addPage(); finalY = 20; }
 
+        // Breakdown Table
         doc.setFontSize(11); doc.setTextColor(0); doc.setFont(undefined, 'bold');
         doc.text("Payment Breakdown & Tax Invoice Calculation", 15, finalY);
         doc.setLineWidth(0.5); doc.line(15, finalY + 2, 95, finalY + 2);
@@ -580,6 +601,12 @@
         tableBody.push([{ content: `Balance Payable to SAES (${reportPeriod})`, colSpan: 2, styles: { halign: 'right', fontStyle: 'bold', fontSize: 11, fillColor: [0, 86, 179], textColor: [255, 255, 255] } }, { content: formatCurr(finalBalance), styles: { fontStyle: 'bold', fontSize: 11, fillColor: [0, 86, 179], textColor: [255, 255, 255] } }]);
 
         doc.autoTable({ startY: finalY + 5, head: [['Description', 'Received in Tyro', 'Cash at SAES']], body: tableBody, theme: 'grid', headStyles: { fillColor: [0, 86, 179] }, columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right', font: 'courier' }, 2: { halign: 'right', font: 'courier' } } });
+        
+        // --- FIX WAS HERE: Define fileName before saving ---
+        const cleanDocName = docName.replace(/[^a-zA-Z0-9]/g, '_');
+        const cleanPeriod = reportPeriod.replace(/[^a-zA-Z0-9]/g, '_');
+        const fileName = `Invoice_${cleanDocName}_${cleanPeriod}.pdf`;
+
         doc.save(fileName);
     };
 
