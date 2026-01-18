@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.13</title>
+    <title>SA Eye Specialists Portal - V5.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/tips_data.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -154,7 +159,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.13</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V5.0</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -165,6 +170,7 @@
                     <button class="tab-btn active" id="tabBtnVisuals" onclick="switchTab('visuals')">Financial Dashboard</button>
                     <button class="tab-btn" id="tabBtnData" onclick="switchTab('data')">Financial Data</button>
                     <button class="tab-btn" id="tabBtnSet" onclick="switchTab('settings')">Doctor Settings (Fees)</button>
+                    <button class="tab-btn" id="tabBtnAnalysis" onclick="switchTab('analysis')">Financial Analysis</button>
                 </div>
             </div>
             <div class="user-area">
@@ -304,9 +310,20 @@
                 <div id="noDocSelected" style="flex:1; display:flex; align-items:center; justify-content:center; color:#999; font-style:italic;">Select a doctor.</div>
             </div>
         </div>
+
+        <div id="tab-analysis" class="tab-content">
+            <div style="background: #fff; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px;">
+                <h3 style="margin: 0; color: #0056b3;">Custom Report Builder</h3>
+                <p style="margin: 5px 0 0; color: #666; font-size: 13px;">Drag and drop fields to analyze your clinic's performance.</p>
+            </div>
+            
+            <div id="pivotOutput" style="overflow-x: auto; min-height: 500px;">
+                <div style="padding: 40px; text-align: center; color: #999;">Loading Analysis Tools...</div>
+            </div>
+        </div>
         
         <div class="version-display">
-            <span>Build Version: 4.13</span>
+            <span>Build Version: 5.0</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -962,21 +979,25 @@
         let btnId = 'tabBtnVisuals'; 
         if(tab === 'data') btnId = 'tabBtnData'; 
         if(tab === 'settings') btnId = 'tabBtnSet';
+        if(tab === 'analysis') btnId = 'tabBtnAnalysis'; // <--- NEW LINE
+        
         document.getElementById(btnId).classList.add('active');
         
-        // 4. FIX IS HERE: If switching to Data tab, run logic directly (no click)
+        // 4. Special logic for specific tabs
         if (tab === 'data') {
             const activeFY = document.getElementById('fyDropdown').value;
-            // Ensure the data tab filter matches the dashboard year
             if(document.getElementById('dataFyFilter')) {
                 document.getElementById('dataFyFilter').value = activeFY;
-                // Run the new logic function directly!
-                if(typeof runFilterLogic === 'function') {
-                    runFilterLogic(); 
-                }
+                if(typeof runFilterLogic === 'function') runFilterLogic(); 
             }
         }
+        
+        // 5. NEW: Initialize Pivot Table when entering Analysis tab
+        if (tab === 'analysis') {
+            initPivotTable();
+        }
     };
+    
     function renderDoctorList() {
         const doctors = [...new Set(allRecords.map(r => r.doctorName))].sort();
         const panel = document.getElementById('doctorListPanel'); panel.innerHTML = "";
@@ -1023,7 +1044,42 @@
             const activeFY = document.getElementById('fyDropdown').value; loadScopedData(activeFY);
         } catch (e) { document.getElementById('saveStatus').innerText = "Error: " + e.message; }
     };
-    
+    // --- PIVOT TABLE LOGIC ---
+    function initPivotTable() {
+        if(!allRecords || allRecords.length === 0) {
+            document.getElementById('pivotOutput').innerHTML = '<p>No data available to analyze.</p>';
+            return;
+        }
+
+        // 1. Prepare Data: Convert raw data into a clean list for the Pivot Tool
+        // We add "Financial Year" and "Month" as explicit fields to make grouping easier
+        const pivotData = allRecords.map(r => {
+            const {rate} = getRate(r.doctorName, r.jsDate);
+            const fee = (r.AmountReceived || 0) * (rate / 100);
+            return {
+                Date: r.reportDate,
+                Month: r.jsDate.toLocaleString('default', { month: 'short', year: 'numeric' }),
+                "Financial Year": getFinancialYear(r.jsDate),
+                Doctor: r.doctorName,
+                Location: r.location,
+                "Total Billings": r.AmountReceived || 0,
+                "Practice Revenue": fee,
+                "Cash Received": r.CashReceived || 0,
+                "EFTPOS Received": r.EFTPOSReceived || 0
+            };
+        });
+
+        // 2. Render the Pivot UI
+        // We use jQuery ($) here because the library requires it
+        $("#pivotOutput").pivotUI(pivotData, {
+            rows: ["Doctor"],
+            cols: ["Month"],
+            vals: ["Total Billings"],
+            aggregatorName: "Sum",
+            rendererName: "Table Heatmap",
+            renderers: $.pivotUtilities.renderers
+        });
+    }
 </script>
 </body>
 </html>
