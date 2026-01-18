@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SA Eye Specialists Portal - V4.6</title>
+    <title>SA Eye Specialists Portal - V4.7</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -70,6 +70,31 @@
         .btn-purple { background-color: #6f42c1; color: white; }
         .hidden { display: none; }
         .version-display { padding: 10px 20px; font-size: 11px; color: #999; border-top: 1px solid #eee; background: #fdfdfd; display: flex; justify-content: space-between; }
+        /* --- NEW STYLES FOR PHASE 1 --- */
+        
+        /* 1. Sticky Table Headers */
+        th { 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1); /* Adds a subtle shadow */
+        }
+
+        /* 2. Skeleton Loading Animation */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+            height: 20px;
+            width: 100%;
+            display: block;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
     </style>
 </head>
 <body>
@@ -84,7 +109,7 @@
         <input type="email" id="email" class="login-input" placeholder="Email">
         <input type="password" id="password" class="login-input" placeholder="Password">
         <button class="btn btn-primary" style="width:100%; margin-top:15px; padding:15px;" id="loginBtn">Sign In</button>
-        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.6</p>
+        <p style="font-size: 10px; color: #ccc; margin-top: 20px;">Build V4.7</p>
     </div>
 
     <div id="appSection" class="hidden">
@@ -231,7 +256,7 @@
         </div>
         
         <div class="version-display">
-            <span>Build Version: 4.6</span>
+            <span>Build Version: 4.7</span>
             <span id="dbStatus">System Status: Ready</span>
         </div>
     </div>
@@ -301,6 +326,7 @@
     // --- 3. DATA LOADER ---
     async function loadScopedData(targetFY) {
         document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
+        renderSkeletonLoader();
         
         const startYear = "20" + targetFY.substring(2, 4); 
         const startDate = `${startYear}-07-01`;
@@ -478,6 +504,32 @@
         reader.readAsArrayBuffer(this.files[0]);
     };
 
+    // --- VISUAL HELPERS ---
+    function renderSkeletonLoader() {
+        const tbody = document.getElementById('recordsTableBody');
+        let html = '';
+        // Create 10 fake rows
+        for(let i=0; i<10; i++) {
+            html += `
+                <tr>
+                    <td><span class="skeleton" style="width: 80px;"></span></td>
+                    <td><span class="skeleton" style="width: 120px;"></span></td>
+                    <td><span class="skeleton" style="width: 100px;"></span></td>
+                    <td><span class="skeleton" style="width: 80px;"></span></td>
+                    <td><span class="skeleton" style="width: 40px;"></span></td>
+                    <td><span class="skeleton" style="width: 80px;"></span></td>
+                    <td><span class="skeleton" style="width: 60px;"></span></td>
+                    <td><span class="skeleton" style="width: 60px;"></span></td>
+                    <td></td>
+                </tr>`;
+        }
+        tbody.innerHTML = html;
+        // Reset totals to "..." while loading
+        ['totalReceived', 'totalFee', 'totalGST', 'totalRemit'].forEach(id => {
+            document.getElementById(id).innerText = "...";
+        });
+    }
+    
     // --- 5. UI & LOGIC ---
     window.generatePDF = function() {
         const docName = document.getElementById('doctorFilter').value;
