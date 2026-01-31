@@ -875,18 +875,15 @@
         }
     }
 
-// --- 6. AUDIT LOGGING (STEALTH MODE + LOCATION) ---
+// --- 6. AUDIT LOGGING (VIA IPWHO.IS) ---
 async function logUserLogin(email) {
     // Check if we already logged this session to avoid duplicates on refresh
     if (sessionStorage.getItem('logged_in_session')) return;
 
     try {
         // 1. Get IP & Location Data
-        // 'no-referrer' hides your website URL from ipapi.co logs
-        const res = await fetch('https://ipapi.co/json/', {
-            referrerPolicy: 'no-referrer'
-        });
-        
+        // We use 'ipwho.is' which is friendlier for free, client-side apps
+        const res = await fetch('https://ipwho.is/');
         const data = await res.json();
         
         // 2. Save to Firestore 'audit_logs' collection
@@ -897,12 +894,12 @@ async function logUserLogin(email) {
             
             // Network Details
             ip_address: data.ip || 'Unknown',
-            isp: data.org || 'Unknown', // e.g. Telstra
+            isp: (data.connection && data.connection.isp) ? data.connection.isp : 'Unknown',
             
             // Location Details
             city: data.city || 'Unknown',
             region: data.region || 'Unknown',
-            country: data.country_name || 'Unknown',
+            country: data.country || 'Unknown',
             
             // Device Details
             userAgent: navigator.userAgent 
@@ -910,10 +907,9 @@ async function logUserLogin(email) {
 
         // 3. Mark session as logged
         sessionStorage.setItem('logged_in_session', 'true');
-        console.log("Audit log saved with Location (Stealth Mode).");
+        console.log("Audit log saved with Location (ipwho.is).");
 
     } catch (e) {
-        // If the service is blocked (e.g. adblocker) or down, we just ignore it
         console.error("Could not save audit log:", e);
     }
 }
