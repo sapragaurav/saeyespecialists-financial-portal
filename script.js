@@ -12,6 +12,7 @@
     const db = firebase.firestore();
     
     let allRecords = [];
+    let reportCache = {};
     let doctorSettingsMap = {};
     let charts = {};
     let currentEditingDoc = "";
@@ -43,23 +44,23 @@
     }
 
     async function confirmDeleteAction() {
-        if(!pendingDeleteId) return;
-        closeModal();
-        try {
-            await db.collection("daily_reports").doc(pendingDeleteId).delete();
-            
-            const activeFY = document.getElementById('fyDropdown').value;
-            
-            // CLEAR CACHE so the deleted item disappears
-            sessionStorage.removeItem(`portal_data_${activeFY}`);
-            
-            // Reload with forceRefresh = true
-            loadScopedData(activeFY, true);
-        } catch(e) {
-            showCustomAlert("Error", "Could not delete: " + e.message);
-        }
-        pendingDeleteId = null;
+    if(!pendingDeleteId) return;
+    closeModal();
+    try {
+        await db.collection("daily_reports").doc(pendingDeleteId).delete();
+        
+        const activeFY = document.getElementById('fyDropdown').value;
+        
+        // DELETE FROM RAM so we are forced to re-fetch fresh data
+        delete reportCache[activeFY];
+        
+        // Reload
+        loadScopedData(activeFY, true);
+    } catch(e) {
+        showCustomAlert("Error", "Could not delete: " + e.message);
     }
+    pendingDeleteId = null;
+}
     
     const formatCurr = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n);
     const parseDate = (str) => { 
@@ -120,88 +121,82 @@
         }
     });
     
-    // --- 3. DATA LOADER (UPDATED WITH CACHING) ---
-    async function loadScopedData(targetFY, forceRefresh = false) {
-        document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
-        if(!forceRefresh) renderSkeletonLoader();
-        
-        const startYear = "20" + targetFY.substring(2, 4); 
-        const startDate = `${startYear}-07-01`;
-        const endDate = `${parseInt(startYear)+1}-06-30`;
-        const cacheKey = `portal_data_${targetFY}`; // Unique name for this year's data
+    // --- 3. DATA LOADER (RAM CACHING STRATEGY) ---
+async function loadScopedData(targetFY, forceRefresh = false) {
+    document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
+    if(!forceRefresh) renderSkeletonLoader();
+    
+    const startYear = "20" + targetFY.substring(2, 4); 
+    const startDate = `${startYear}-07-01`;
+    const endDate = `${parseInt(startYear)+1}-06-30`;
 
-        try {
-            // 1. Always fetch Settings (Small, cheap, and ensures rates are current)
-            const sSnap = await db.collection("doctor_settings").get();
-            doctorSettingsMap = {}; 
-            let dynamicYears = [];
-            sSnap.forEach(d => {
-                if(d.id === "meta_years") {
-                    dynamicYears = d.data().list || [];
-                } else {
-                    doctorSettingsMap[d.id] = d.data();
-                }
-            });
-
-            initFYDropdowns(targetFY, dynamicYears); 
-
-            if (dynamicYears.length === 0) {
-                document.getElementById('dbStatus').innerText = `Status: Ready (No Data)`;
-                return; 
-            }
-
-            // 2. CACHE CHECK: Do we have this year in memory?
-            const cachedData = sessionStorage.getItem(cacheKey);
-
-            if (cachedData && !forceRefresh) {
-                console.log(`⚡ Loaded ${targetFY} from Session Cache (0 Cost)`);
-                allRecords = JSON.parse(cachedData);
+    try {
+        // 1. Fetch Settings (Always fetch to ensure rates are current)
+        const sSnap = await db.collection("doctor_settings").get();
+        doctorSettingsMap = {}; 
+        let dynamicYears = [];
+        sSnap.forEach(d => {
+            if(d.id === "meta_years") {
+                dynamicYears = d.data().list || [];
             } else {
-                console.log(`☁️ Fetching ${targetFY} from Firebase...`);
-                const rSnap = await db.collection("daily_reports")
-                    .where('dateISO', '>=', startDate)
-                    .where('dateISO', '<=', endDate)
-                    .get();
-
-                allRecords = []; 
-                rSnap.forEach(d => { 
-                    let r=d.data(); 
-                    r.id=d.id; 
-                    r.jsDate=parseDate(r.reportDate); 
-                    allRecords.push(r); 
-                });
-
-                // SAVE result to cache for next time
-                try {
-                    sessionStorage.setItem(cacheKey, JSON.stringify(allRecords));
-                } catch (e) {
-                    console.warn("Browser memory full, could not cache.");
-                }
+                doctorSettingsMap[d.id] = d.data();
             }
+        });
 
-            // 3. RE-PROCESS DATES (JSON.parse turns dates into strings, we need objects)
-            allRecords.forEach(r => {
-                 if (typeof r.jsDate === 'string') r.jsDate = new Date(r.jsDate);
-                 // Fallback if date is invalid
-                 if (!r.jsDate || isNaN(r.jsDate)) r.jsDate = parseDate(r.reportDate);
+        initFYDropdowns(targetFY, dynamicYears); 
+
+        if (dynamicYears.length === 0) {
+            document.getElementById('dbStatus').innerText = `Status: Ready (No Data)`;
+            return; 
+        }
+
+        // 2. RAM CACHE CHECK
+        // If we have it in memory AND we are not forcing a refresh -> Use RAM
+        if (reportCache[targetFY] && !forceRefresh) {
+            console.log(`⚡ Loaded ${targetFY} from RAM Cache (0 Reads)`);
+            allRecords = reportCache[targetFY];
+        } else {
+            // Otherwise -> Go to Network
+            console.log(`☁️ Fetching ${targetFY} from Firebase...`);
+            const rSnap = await db.collection("daily_reports")
+                .where('dateISO', '>=', startDate)
+                .where('dateISO', '<=', endDate)
+                .get();
+
+            allRecords = []; 
+            rSnap.forEach(d => { 
+                let r=d.data(); 
+                r.id=d.id; 
+                r.jsDate=parseDate(r.reportDate); 
+                allRecords.push(r); 
             });
 
-            document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
-            
-            populateMonthDropdown();
-            populateDoctorFilterDropdown();           
-            renderVisuals();
-            renderDoctorList();
-            
-            if (document.getElementById('tab-data').classList.contains('active')) {
-                runFilterLogic();
-            }
-            
-        } catch (e) { 
-            document.getElementById('dbStatus').innerText = "Error: " + e.message; 
-            console.error(e);
+            // SAVE TO RAM
+            reportCache[targetFY] = allRecords;
         }
+
+        // 3. Re-process dates (Just to be safe)
+        allRecords.forEach(r => {
+             if (typeof r.jsDate === 'string') r.jsDate = new Date(r.jsDate);
+             if (!r.jsDate || isNaN(r.jsDate)) r.jsDate = parseDate(r.reportDate);
+        });
+
+        document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
+        
+        populateMonthDropdown();
+        populateDoctorFilterDropdown();           
+        renderVisuals();
+        renderDoctorList();
+        
+        if (document.getElementById('tab-data').classList.contains('active')) {
+            runFilterLogic();
+        }
+        
+    } catch (e) { 
+        document.getElementById('dbStatus').innerText = "Error: " + e.message; 
+        console.error(e);
     }
+}
 
     function initFYDropdowns(activeFY, availableYears = []) {
         const selDash = document.getElementById('fyDropdown'); 
@@ -312,10 +307,10 @@
                 status.style.color = "green";
                 status.innerText = `✔ Saved ${count} records (${fileFY})`;
                 
-                // Clear cache so new data appears instantly
-                sessionStorage.removeItem(`portal_data_${fileFY}`);
+                // DELETE FROM RAM
+                delete reportCache[fileFY];
 
-                // Reload with forceRefresh = true
+                // Reload
                 setTimeout(() => loadScopedData(fileFY, true), 1000);
                 
             } catch(e) {
@@ -875,39 +870,28 @@
         }
     }
 
-// --- 6. AUDIT LOGGING (VIA IPWHO.IS) ---
+// --- 6. AUDIT LOGGING (ALWAYS RUNS) ---
 async function logUserLogin(email) {
-    // Check if we already logged this session to avoid duplicates on refresh
-    if (sessionStorage.getItem('logged_in_session')) return;
-
+    // No "Session Check" - runs on every F5/Login
     try {
-        // 1. Get IP & Location Data
-        // We use 'ipwho.is' which is friendlier for free, client-side apps
         const res = await fetch('https://ipwho.is/');
         const data = await res.json();
         
-        // 2. Save to Firestore 'audit_logs' collection
         await db.collection('audit_logs').add({
             email: email,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            action: 'LOGIN',
+            action: 'ACCESS', // "Access" covers both Login and Refresh
             
-            // Network Details
             ip_address: data.ip || 'Unknown',
             isp: (data.connection && data.connection.isp) ? data.connection.isp : 'Unknown',
             
-            // Location Details
             city: data.city || 'Unknown',
             region: data.region || 'Unknown',
             country: data.country || 'Unknown',
             
-            // Device Details
             userAgent: navigator.userAgent 
         });
-
-        // 3. Mark session as logged
-        sessionStorage.setItem('logged_in_session', 'true');
-        console.log("Audit log saved with Location (ipwho.is).");
+        console.log("Audit log saved.");
 
     } catch (e) {
         console.error("Could not save audit log:", e);
