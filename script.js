@@ -116,6 +116,7 @@
         document.getElementById('appSection').classList.remove('hidden');
         const currentFY = getFinancialYear(new Date());
         loadScopedData(currentFY);
+        logUserLogin(user.email);
         }
     });
     
@@ -873,3 +874,39 @@
             }
         }
     }
+
+// --- 6. AUDIT LOGGING (STEALTH MODE) ---
+async function logUserLogin(email) {
+    // Check if we already logged this session to avoid duplicates on refresh
+    if (sessionStorage.getItem('logged_in_session')) return;
+
+    try {
+        // 1. Get IP Address (Stealth Mode)
+        // 'no-referrer' prevents ipify from knowing your website URL
+        const ipRes = await fetch('https://api.ipify.org?format=json', {
+            referrerPolicy: 'no-referrer'
+        });
+        
+        const ipData = await ipRes.json();
+        const userIp = ipData.ip;
+
+        // 2. Save to Firestore 'audit_logs' collection
+        // Note: The collection will auto-create if it doesn't exist
+        await db.collection('audit_logs').add({
+            email: email,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            ip_address: userIp,
+            action: 'LOGIN',
+            userAgent: navigator.userAgent // Captures Browser, OS, and Device info
+        });
+
+        // 3. Mark session as logged so we don't spam the DB on every page refresh
+        sessionStorage.setItem('logged_in_session', 'true');
+        console.log("Audit log saved (Stealth Mode).");
+
+    } catch (e) {
+        // If IP service fails or DB is blocked, just ignore it.
+        // We don't want to stop the user from working.
+        console.error("Could not save audit log:", e);
+    }
+}
