@@ -47,8 +47,14 @@
         closeModal();
         try {
             await db.collection("daily_reports").doc(pendingDeleteId).delete();
+            
             const activeFY = document.getElementById('fyDropdown').value;
-            loadScopedData(activeFY);
+            
+            // CLEAR CACHE so the deleted item disappears
+            sessionStorage.removeItem(`portal_data_${activeFY}`);
+            
+            // Reload with forceRefresh = true
+            loadScopedData(activeFY, true);
         } catch(e) {
             showCustomAlert("Error", "Could not delete: " + e.message);
         }
@@ -113,16 +119,18 @@
         }
     });
     
-    // --- 3. DATA LOADER ---
-    async function loadScopedData(targetFY) {
+    // --- 3. DATA LOADER (UPDATED WITH CACHING) ---
+    async function loadScopedData(targetFY, forceRefresh = false) {
         document.getElementById('dbStatus').innerText = `Status: Loading ${targetFY}...`;
-        renderSkeletonLoader();
+        if(!forceRefresh) renderSkeletonLoader();
         
         const startYear = "20" + targetFY.substring(2, 4); 
         const startDate = `${startYear}-07-01`;
         const endDate = `${parseInt(startYear)+1}-06-30`;
+        const cacheKey = `portal_data_${targetFY}`; // Unique name for this year's data
 
         try {
+            // 1. Always fetch Settings (Small, cheap, and ensures rates are current)
             const sSnap = await db.collection("doctor_settings").get();
             doctorSettingsMap = {}; 
             let dynamicYears = [];
@@ -134,40 +142,58 @@
                 }
             });
 
-            // Initialize Dropdowns FIRST based on what we found in settings
             initFYDropdowns(targetFY, dynamicYears); 
 
-            // If the DB says "No Data" (dynamicYears is empty), stop here.
-            // This fixes Bug 1 (Showing default year when empty)
             if (dynamicYears.length === 0) {
                 document.getElementById('dbStatus').innerText = `Status: Ready (No Data)`;
                 return; 
             }
 
-            // Only Query if we have valid years
-            const rSnap = await db.collection("daily_reports")
-                .where('dateISO', '>=', startDate)
-                .where('dateISO', '<=', endDate)
-                .get();
+            // 2. CACHE CHECK: Do we have this year in memory?
+            const cachedData = sessionStorage.getItem(cacheKey);
 
-            allRecords = []; 
-            rSnap.forEach(d => { 
-                let r=d.data(); 
-                r.id=d.id; 
-                r.jsDate=parseDate(r.reportDate); 
-                allRecords.push(r); 
+            if (cachedData && !forceRefresh) {
+                console.log(`⚡ Loaded ${targetFY} from Session Cache (0 Cost)`);
+                allRecords = JSON.parse(cachedData);
+            } else {
+                console.log(`☁️ Fetching ${targetFY} from Firebase...`);
+                const rSnap = await db.collection("daily_reports")
+                    .where('dateISO', '>=', startDate)
+                    .where('dateISO', '<=', endDate)
+                    .get();
+
+                allRecords = []; 
+                rSnap.forEach(d => { 
+                    let r=d.data(); 
+                    r.id=d.id; 
+                    r.jsDate=parseDate(r.reportDate); 
+                    allRecords.push(r); 
+                });
+
+                // SAVE result to cache for next time
+                try {
+                    sessionStorage.setItem(cacheKey, JSON.stringify(allRecords));
+                } catch (e) {
+                    console.warn("Browser memory full, could not cache.");
+                }
+            }
+
+            // 3. RE-PROCESS DATES (JSON.parse turns dates into strings, we need objects)
+            allRecords.forEach(r => {
+                 if (typeof r.jsDate === 'string') r.jsDate = new Date(r.jsDate);
+                 // Fallback if date is invalid
+                 if (!r.jsDate || isNaN(r.jsDate)) r.jsDate = parseDate(r.reportDate);
             });
 
             document.getElementById('dbStatus').innerText = `Status: Online | ${allRecords.length} Records (${targetFY})`;
             
             populateMonthDropdown();
-            populateDoctorFilterDropdown();            
+            populateDoctorFilterDropdown();           
             renderVisuals();
             renderDoctorList();
             
-            // IF the user is on the Data tab, run the filter immediately
             if (document.getElementById('tab-data').classList.contains('active')) {
-                runFilterLogic(); // <--- THIS is likely missing or still says .click()
+                runFilterLogic();
             }
             
         } catch (e) { 
@@ -285,7 +311,11 @@
                 status.style.color = "green";
                 status.innerText = `✔ Saved ${count} records (${fileFY})`;
                 
-                setTimeout(() => loadScopedData(fileFY), 1000); 
+                // Clear cache so new data appears instantly
+                sessionStorage.removeItem(`portal_data_${fileFY}`);
+
+                // Reload with forceRefresh = true
+                setTimeout(() => loadScopedData(fileFY, true), 1000);
                 
             } catch(e) {
                 status.style.color = "red";
